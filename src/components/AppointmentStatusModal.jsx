@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import styled from 'styled-components'
-import { FaCheck, FaClock, FaUser, FaXmark } from 'react-icons/fa6'
+import { FaBan, FaCheck, FaClock, FaUser, FaXmark } from 'react-icons/fa6'
 import { APPOINTMENT_STATUS } from '../appointments'
 import { STATUS_OPTIONS } from '../appointmentStatus'
+import { formatServiceNames } from '../utils/appointmentServices'
 import { formatTime12h } from '../utils/dates'
 import { Button, SecondaryButton } from './ui'
 
@@ -154,7 +155,41 @@ const Actions = styled.div`
   border-top: 1px solid var(--color-border);
 `
 
-function AppointmentStatusModal({ appointment, client, service, onSave, onClose }) {
+const Divider = styled.div`
+  height: 1px;
+  background: var(--color-border);
+`
+
+const CancelAction = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-danger);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: var(--color-danger-soft);
+    border-color: var(--color-danger);
+  }
+`
+
+function AppointmentStatusModal({
+  appointment,
+  client,
+  services,
+  onSave,
+  onCancel,
+  onClose,
+}) {
   const [selected, setSelected] = useState(appointment.status)
   const [saving, setSaving] = useState(false)
 
@@ -203,7 +238,7 @@ function AppointmentStatusModal({ appointment, client, service, onSave, onClose 
             <SummaryName>{client ? client.name : 'Cliente'}</SummaryName>
             <SummaryLine>
               <FaUser size={12} />
-              {service ? service.name : 'Servicio'}
+              {formatServiceNames(services)}
             </SummaryLine>
             <SummaryLine>
               <FaClock size={12} />
@@ -241,6 +276,16 @@ function AppointmentStatusModal({ appointment, client, service, onSave, onClose 
               )
             })}
           </Options>
+
+          {appointment.status !== APPOINTMENT_STATUS.CANCELLED && onCancel && (
+            <>
+              <Divider />
+              <CancelAction type="button" onClick={onCancel}>
+                <FaBan size={14} />
+                Cancelar cita
+              </CancelAction>
+            </>
+          )}
         </Body>
 
         <Actions>

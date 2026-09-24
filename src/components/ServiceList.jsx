@@ -1,6 +1,14 @@
 import styled from 'styled-components'
-import { FaClock, FaPencil, FaPlus, FaPowerOff, FaScissors } from 'react-icons/fa6'
-import { formatDuration, formatPrice } from '../utils/format'
+import {
+  FaCalendarDays,
+  FaClock,
+  FaPencil,
+  FaPlus,
+  FaPowerOff,
+  FaScissors,
+  FaStar,
+} from 'react-icons/fa6'
+import { formatDuration, formatMonthDay, formatPrice } from '../utils/format'
 import BarberIcon from './BarberIcon'
 import { Badge, Button, EmptyState, IconButton } from './ui'
 
@@ -106,6 +114,30 @@ const PriceChip = styled.span`
   color: var(--color-primary);
 `
 
+const RangeChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--color-info-soft);
+  color: var(--color-info);
+`
+
+const PointsChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--color-warning-soft, var(--color-info-soft));
+  color: var(--color-warning, var(--color-info));
+`
+
 const Actions = styled.div`
   display: flex;
   gap: 0.375rem;
@@ -117,7 +149,13 @@ const Actions = styled.div`
   }
 `
 
-function ServiceList({ services, onEdit, onToggleActive, onCreate }) {
+function ServiceList({
+  services,
+  onEdit,
+  onToggleActive,
+  onScheduleRange,
+  onCreate,
+}) {
   if (services.length === 0) {
     return (
       <EmptyState
@@ -162,6 +200,19 @@ function ServiceList({ services, onEdit, onToggleActive, onCreate }) {
               {typeof service.price === 'number' && (
                 <PriceChip>{formatPrice(service.price)}</PriceChip>
               )}
+              {Number(service.points) > 0 && (
+                <PointsChip>
+                  <FaStar size={11} />
+                  {Number(service.points)} pt{Number(service.points) === 1 ? '' : 's'}
+                </PointsChip>
+              )}
+              {!service.active && (service.activeFrom || service.activeUntil) && (
+                <RangeChip>
+                  <FaCalendarDays size={12} />
+                  {formatMonthDay(service.activeFrom) || '—'} →{' '}
+                  {formatMonthDay(service.activeUntil) || '—'}
+                </RangeChip>
+              )}
             </Meta>
           </Info>
 
@@ -174,6 +225,17 @@ function ServiceList({ services, onEdit, onToggleActive, onCreate }) {
             >
               <FaPencil size={15} />
             </IconButton>
+            {!service.active && (
+              <IconButton
+                type="button"
+                $variant={service.activeFrom || service.activeUntil ? 'success' : undefined}
+                title="Activar por rango de fechas"
+                aria-label="Activar por rango de fechas"
+                onClick={() => onScheduleRange(service)}
+              >
+                <FaCalendarDays size={15} />
+              </IconButton>
+            )}
             <IconButton
               type="button"
               $variant={service.active ? 'danger' : 'success'}

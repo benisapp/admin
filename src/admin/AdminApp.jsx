@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import { FaScissors } from 'react-icons/fa6'
 import Sidebar from '../components/Sidebar'
@@ -6,7 +6,8 @@ import BottomNav from '../components/BottomNav'
 import Inicio from '../pages/Inicio'
 import Clientes from '../pages/Clientes'
 import Servicios from '../pages/Servicios'
-import Horarios from '../pages/Horarios'
+import Descuentos from '../pages/Descuentos'
+import Configuracion from '../pages/Configuracion'
 
 const Layout = styled.div`
   display: flex;
@@ -56,28 +57,62 @@ const views = {
   inicio: Inicio,
   clientes: Clientes,
   servicios: Servicios,
-  horarios: Horarios,
+  descuentos: Descuentos,
+  configuracion: Configuracion,
+}
+
+// La navegación se refleja en el hash de la URL (#/inicio, #/clientes,
+// #/clientes/<id>) para que funcionen los botones atrás/adelante del
+// navegador y del sistema en la PWA instalada. Al usar hash (y no rutas)
+// no hace falta configuración especial en GitHub Pages.
+const toHash = (view, clientId) =>
+  clientId ? `#/${view}/${encodeURIComponent(clientId)}` : `#/${view}`
+
+const readLocation = () => {
+  const parts = window.location.hash.replace(/^#\/?/, '').split('/')
+  const view = views[parts[0]] ? parts[0] : 'inicio'
+  const clientId =
+    view === 'clientes' && parts[1] ? decodeURIComponent(parts[1]) : null
+  return { view, clientId }
 }
 
 function AdminApp() {
-  const [active, setActive] = useState('inicio')
-  const [fichaClientId, setFichaClientId] = useState(null)
+  const [location, setLocation] = useState(readLocation)
+
+  useEffect(() => {
+    // Siembra el historial con una entrada base (#/inicio) para que, en una
+    // carga directa con hash (p. ej. al abrir la PWA en una ficha), el botón
+    // atrás no saque al usuario de la app.
+    if (!window.history.state?.seeded) {
+      const current = readLocation()
+      window.history.replaceState({ seeded: true }, '', toHash('inicio'))
+      const currentHash = toHash(current.view, current.clientId)
+      if (currentHash !== toHash('inicio')) {
+        window.history.pushState({ seeded: true }, '', currentHash)
+      }
+    }
+
+    const onPopState = () => setLocation(readLocation())
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   const navigate = (id) => {
-    setActive(id)
-    if (id === 'clientes') setFichaClientId(null)
+    if (id === location.view && !location.clientId) return
+    window.history.pushState(null, '', toHash(id))
+    setLocation({ view: id, clientId: null })
   }
 
   const openClientFicha = (clientId) => {
-    setFichaClientId(clientId)
-    setActive('clientes')
+    window.history.pushState(null, '', toHash('clientes', clientId))
+    setLocation({ view: 'clientes', clientId })
   }
 
-  const View = views[active]
+  const View = views[location.view]
 
   return (
     <Layout>
-      <Sidebar active={active} onNavigate={navigate} />
+      <Sidebar active={location.view} onNavigate={navigate} />
 
       <Main>
         <Topbar>
@@ -90,11 +125,12 @@ function AdminApp() {
         <View
           onNavigate={navigate}
           onOpenClient={openClientFicha}
-          initialClientId={fichaClientId}
+          onSelectClient={openClientFicha}
+          initialClientId={location.clientId}
         />
       </Main>
 
-      <BottomNav active={active} onNavigate={navigate} />
+      <BottomNav active={location.view} onNavigate={navigate} />
     </Layout>
   )
 }

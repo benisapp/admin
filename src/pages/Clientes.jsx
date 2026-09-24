@@ -3,15 +3,26 @@ import styled from 'styled-components'
 import {
   FaCircleCheck,
   FaMagnifyingGlass,
+  FaPlus,
   FaTriangleExclamation,
   FaUser,
   FaUsers,
 } from 'react-icons/fa6'
 import { fetchClients, normalizePhone } from '../clients'
 import { fetchServices } from '../services'
+import { fetchDiscounts } from '../discounts'
 import NewAppointmentModal from '../components/NewAppointmentModal'
+import NewClientModal from '../components/NewClientModal'
 import ClientFicha from '../components/ClientFicha'
-import { Alert, EmptyState, Field, Input, Label, Spinner } from '../components/ui'
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Field,
+  Input,
+  Label,
+  Spinner,
+} from '../components/ui'
 
 const Wrapper = styled.div`
   flex: 1;
@@ -137,15 +148,16 @@ function formatPhone(phone) {
     : digits
 }
 
-function Clientes({ initialClientId, onNavigate }) {
-  const cameFromAppointment = initialClientId != null
+function Clientes({ initialClientId, onSelectClient }) {
   const [selectedClientId, setSelectedClientId] = useState(initialClientId || null)
   const [clients, setClients] = useState([])
   const [services, setServices] = useState([])
+  const [discounts, setDiscounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [query, setQuery] = useState('')
   const [showNewAppt, setShowNewAppt] = useState(false)
+  const [showNewClient, setShowNewClient] = useState(false)
   const [fichaReload, setFichaReload] = useState(0)
   const [notice, setNotice] = useState(null)
 
@@ -167,13 +179,15 @@ function Clientes({ initialClientId, onNavigate }) {
     let cancelled = false
     const load = async () => {
       try {
-        const [clientList, serviceList] = await Promise.all([
+        const [clientList, serviceList, discountList] = await Promise.all([
           fetchClients(),
           fetchServices(),
+          fetchDiscounts(),
         ])
         if (cancelled) return
         setClients(clientList)
         setServices(serviceList)
+        setDiscounts(discountList)
       } catch (err) {
         console.error(err)
         if (!cancelled) setLoadError(true)
@@ -186,6 +200,12 @@ function Clientes({ initialClientId, onNavigate }) {
       cancelled = true
     }
   }, [])
+
+  // Sincroniza la ficha con la URL cuando el usuario navega con
+  // los botones atrás/adelante del navegador.
+  useEffect(() => {
+    setSelectedClientId(initialClientId || null)
+  }, [initialClientId])
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) || null
 
@@ -210,9 +230,24 @@ function Clientes({ initialClientId, onNavigate }) {
     showNotice('success', 'Cita creada correctamente.')
   }
 
+  const handleClientCreated = async (client) => {
+    setShowNewClient(false)
+    try {
+      setClients(await fetchClients())
+    } catch (err) {
+      console.error(err)
+    }
+    showNotice('success', 'Cliente creada correctamente.')
+    openFicha(client.id)
+  }
+
   const handleBack = () => {
-    if (cameFromAppointment) onNavigate('inicio')
-    else setSelectedClientId(null)
+    window.history.back()
+  }
+
+  const openFicha = (clientId) => {
+    setSelectedClientId(clientId)
+    onSelectClient?.(clientId)
   }
 
   return (
@@ -222,6 +257,12 @@ function Clientes({ initialClientId, onNavigate }) {
           <Title>Clientes</Title>
           <Subtitle>Consultá la ficha y el historial de tus clientes.</Subtitle>
         </div>
+        {!selectedClient && (
+          <Button type="button" onClick={() => setShowNewClient(true)}>
+            <FaPlus size={14} />
+            Nuevo cliente
+          </Button>
+        )}
       </PageHeader>
 
       {notice && (
@@ -238,7 +279,7 @@ function Clientes({ initialClientId, onNavigate }) {
           client={selectedClient}
           services={services}
           reloadToken={fichaReload}
-          backLabel={cameFromAppointment ? 'Volver al calendario' : 'Volver'}
+          backLabel="Volver"
           onBack={handleBack}
           onNewAppointment={() => setShowNewAppt(true)}
         />
@@ -273,7 +314,7 @@ function Clientes({ initialClientId, onNavigate }) {
                   <ResultItem
                     key={c.id}
                     type="button"
-                    onClick={() => setSelectedClientId(c.id)}
+                    onClick={() => openFicha(c.id)}
                   >
                     <Avatar>
                       <FaUser size={16} />
@@ -308,8 +349,16 @@ function Clientes({ initialClientId, onNavigate }) {
           initialDate={new Date()}
           clients={clients}
           services={services}
+          discounts={discounts}
           onCreated={handleCreated}
           onClose={() => setShowNewAppt(false)}
+        />
+      )}
+
+      {showNewClient && (
+        <NewClientModal
+          onCreated={handleClientCreated}
+          onClose={() => setShowNewClient(false)}
         />
       )}
     </Wrapper>

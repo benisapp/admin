@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import styled from 'styled-components'
-import { FaDownload, FaFilePdf, FaShareNodes, FaXmark } from 'react-icons/fa6'
+import { FaDownload, FaShareNodes, FaXmark } from 'react-icons/fa6'
+import { formatPrice } from '../utils/format'
 import { Button, SecondaryButton } from './ui'
 
 const Overlay = styled.div`
@@ -68,19 +69,151 @@ const CloseButton = styled.button`
 `
 
 const Preview = styled.div`
-  height: 62vh;
-  min-height: 320px;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: var(--color-bg);
+`
+
+const Brand = styled.div`
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  line-height: 1;
+`
+
+const BrandTag = styled.div`
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+`
+
+const HeadRow = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+`
+
+const HeadRight = styled.div`
+  text-align: right;
+`
+
+const InvoiceTitle = styled.div`
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--color-text);
+`
+
+const InvoiceCode = styled.div`
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+`
+
+const Rule = styled.div`
+  height: 2px;
+  margin: 1rem 0;
+  background: var(--color-primary);
+  border-radius: 1px;
+`
+
+const SectionLabel = styled.div`
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text);
+`
+
+const ClientName = styled.div`
+  margin-top: 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+`
+
+const ClientMeta = styled.div`
+  margin-top: 0.125rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+`
+
+const Table = styled.div`
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+`
+
+const TableHead = styled.div`
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: var(--color-bg);
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+`
 
-  iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-    display: block;
-  }
+const Row = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+`
+
+const RowName = styled.div`
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+`
+
+const RowMeta = styled.div`
+  margin-top: 0.125rem;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+`
+
+const RowPrice = styled.div`
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+`
+
+const TotalRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--color-text);
+`
+
+const DiscountRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.375rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-success);
+`
+
+const Thanks = styled.div`
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 `
 
 const Actions = styled.div`
@@ -90,38 +223,7 @@ const Actions = styled.div`
   border-top: 1px solid var(--color-border);
 `
 
-const Fallback = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 2rem 1.5rem;
-  text-align: center;
-  color: var(--color-text-muted);
-`
-
-const FallbackTitle = styled.p`
-  margin: 0;
-  font-weight: 700;
-  color: var(--color-text);
-`
-
-const FallbackText = styled.p`
-  margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.5;
-`
-
-function canPreviewPdf() {
-  if (typeof navigator === 'undefined') return false
-  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
-  if (isMobile) return false
-  if (typeof navigator.pdfViewerEnabled === 'boolean') {
-    return navigator.pdfViewerEnabled
-  }
-  return true
-}
+const money = (value) => (value != null ? formatPrice(value) : '—')
 
 function InvoiceModal({ data, onClose }) {
   useEffect(() => {
@@ -135,6 +237,8 @@ function InvoiceModal({ data, onClose }) {
       document.body.style.overflow = ''
     }
   }, [onClose])
+
+  const invoice = data?.data
 
   const handleDownload = () => {
     const link = document.createElement('a')
@@ -163,8 +267,6 @@ function InvoiceModal({ data, onClose }) {
     }
   }
 
-  const canPreview = canPreviewPdf()
-
   return (
     <Overlay onClick={onClose}>
       <Dialog onClick={(e) => e.stopPropagation()}>
@@ -179,18 +281,66 @@ function InvoiceModal({ data, onClose }) {
         </Header>
 
         <Preview>
-          {canPreview ? (
-            <iframe src={data.url} title="Vista previa de la factura" />
-          ) : (
-            <Fallback>
-              <FaFilePdf size={42} color="var(--color-primary)" />
-              <FallbackTitle>La factura está lista</FallbackTitle>
-              <FallbackText>
-                Tu navegador no puede mostrar la vista previa del PDF. Usá
-                “Descargar” para abrirlo o “Compartir” para enviarlo.
-              </FallbackText>
-            </Fallback>
-          )}
+          {invoice ? (
+            <>
+              <HeadRow>
+                <div>
+                  <Brand>Benis</Brand>
+                  <BrandTag>Tu centro de belleza</BrandTag>
+                </div>
+                <HeadRight>
+                  <InvoiceTitle>Factura</InvoiceTitle>
+                  <InvoiceCode>Comprobante Nº {invoice.code}</InvoiceCode>
+                </HeadRight>
+              </HeadRow>
+
+              <Rule />
+
+              <SectionLabel>Cliente</SectionLabel>
+              <ClientName>{invoice.clientName}</ClientName>
+              <ClientMeta>{invoice.contact || '—'}</ClientMeta>
+
+              <Table>
+                <TableHead>
+                  <span>Servicio</span>
+                  <span>Precio</span>
+                </TableHead>
+                {invoice.services.map((service, index) => (
+                  <Row key={index}>
+                    <div>
+                      <RowName>{service.name}</RowName>
+                      <RowMeta>
+                        {[invoice.date, service.time, service.duration]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </RowMeta>
+                    </div>
+                    <RowPrice>{money(service.price)}</RowPrice>
+                  </Row>
+                ))}
+              </Table>
+
+              {invoice.discountAmount > 0 && (
+                <DiscountRow>
+                  <span>
+                    Descuento
+                    {invoice.discountTitle ? ` ${invoice.discountTitle}` : ''}
+                    {invoice.discountPercent != null
+                      ? ` (${invoice.discountPercent}%)`
+                      : ''}
+                  </span>
+                  <span>-{money(invoice.discountAmount)}</span>
+                </DiscountRow>
+              )}
+
+              <TotalRow>
+                <span>Total</span>
+                <span>{money(invoice.total)}</span>
+              </TotalRow>
+
+              <Thanks>Gracias por confiar en Benis.</Thanks>
+            </>
+          ) : null}
         </Preview>
 
         <Actions>

@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import styled from 'styled-components'
+import styled, { css } from 'styled-components'
 import {
   FaAngleLeft,
   FaAngleRight,
-  FaBan,
   FaCalendarDay,
   FaCalendarDays,
   FaCircleCheck,
-  FaClock,
-  FaFilePdf,
-  FaPencil,
-  FaPhone,
   FaPlus,
   FaTriangleExclamation,
-  FaUser,
-  FaWhatsapp,
 } from 'react-icons/fa6'
+import {
+  LuEllipsisVertical,
+  LuMail,
+  LuMessageCircle,
+  LuPencil,
+  LuPhone,
+  LuReceipt,
+} from 'react-icons/lu'
 import {
   APPOINTMENT_STATUS,
   getAppointmentsByDate,
@@ -26,14 +27,19 @@ import AppointmentStatusModal from './AppointmentStatusModal'
 import CancelAppointmentModal from './CancelAppointmentModal'
 import { fetchClients } from '../clients'
 import { fetchServices } from '../services'
+import { fetchDiscounts } from '../discounts'
+import { syncAppointmentPoints } from '../points'
 import { getSchedule } from '../settings'
-import { formatDuration } from '../utils/format'
+import { formatDuration, formatPrice } from '../utils/format'
+import {
+  apptTotalDuration,
+  getAppointmentServices,
+} from '../utils/appointmentServices'
 import { generateInvoice } from '../utils/invoice'
 import InvoiceModal from './InvoiceModal'
 import NewAppointmentModal from './NewAppointmentModal'
 import {
   addDays,
-  formatDateLong,
   formatDateString,
   formatTime12h,
   isSameDay,
@@ -50,9 +56,6 @@ const STATUS_META = STATUS_OPTIONS.reduce(
 
 const Card = styled.section`
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
 `
 
 const Header = styled.header`
@@ -61,79 +64,61 @@ const Header = styled.header`
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  padding: 1rem 1.25rem;
+  padding: 1rem 1.5rem 0.875rem;
   border-bottom: 1px solid var(--color-border);
 
   @media (max-width: 767px) {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.75rem;
-    padding: 1rem;
+    gap: 0.625rem;
+    padding: 1rem 1rem 0.875rem;
   }
 `
 
 const HeaderText = styled.div`
   display: flex;
-  align-items: center;
-  gap: 0.625rem;
+  flex-direction: column;
+  gap: 0.125rem;
 
   @media (max-width: 767px) {
-    justify-content: center;
+    align-items: center;
+    text-align: center;
   }
-`
-
-const HeaderIcon = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  flex-shrink: 0;
 `
 
 const HeaderTitle = styled.h2`
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.25rem;
+  line-height: 1.2;
   color: var(--color-text);
-
-  @media (max-width: 767px) {
-    font-size: 1.15rem;
-  }
 `
 
 const HeaderSub = styled.p`
-  margin: 0.125rem 0 0;
-  font-size: 0.8rem;
+  margin: 0;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
-
-  @media (max-width: 767px) {
-    font-size: 0.9rem;
-  }
 `
 
-const Controls = styled.div`
+const HeaderControls = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.625rem;
 
   @media (max-width: 767px) {
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     gap: 0.5rem;
   }
 `
 
-const DayNav = styled.div`
+const NavGroup = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
 
   @media (max-width: 767px) {
-    order: 1;
     justify-content: center;
+    order: 1;
   }
 `
 
@@ -141,58 +126,50 @@ const NavButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  width: 2.75rem;
+  height: 2.75rem;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 
   &:hover {
-    background: var(--color-bg);
-    color: var(--color-text);
-  }
-
-  @media (max-width: 767px) {
-    width: 2.75rem;
-    height: 2.75rem;
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
   }
 `
 
 const TodayButton = styled.button`
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.45rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  min-height: 2.25rem;
+  padding: 0.375rem 1rem;
   cursor: pointer;
   transition: background 0.15s ease;
 
   &:hover {
-    background: var(--color-bg);
-  }
-
-  @media (max-width: 767px) {
-    padding: 0.6rem 1rem;
-    font-size: 0.85rem;
+    background: rgba(183, 110, 121, 0.2);
   }
 `
 
 const NewAppointmentButton = styled.button`
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.375rem;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-sm);
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-radius: var(--radius-full);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease;
 
@@ -201,152 +178,121 @@ const NewAppointmentButton = styled.button`
   }
 
   @media (max-width: 767px) {
-    width: 100%;
-    justify-content: center;
-    padding: 0.7rem 1rem;
-    font-size: 0.9rem;
-    font-weight: 700;
     order: 2;
+    width: 100%;
+    padding: 0.625rem 1rem;
+    font-size: 0.9rem;
   }
 `
 
 const List = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1.25rem;
+  padding: 0.75rem 1.5rem 1.25rem;
+
+  @media (max-width: 767px) {
+    padding: 0.75rem 1rem 1.25rem;
+  }
 `
 
-const Appointment = styled.div`
+const Entry = styled.div`
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  background: ${({ $soft }) => $soft || 'var(--color-surface)'};
-  border: 1px solid ${({ $color }) => $color || 'var(--color-border)'};
-  border-left: 4px solid ${({ $color }) => $color || 'var(--color-primary)'};
-  border-radius: var(--radius-md);
-  padding: 1rem;
-  box-shadow: var(--shadow-sm);
+  align-items: stretch;
+  gap: 0.625rem;
 
   ${({ $cancelled }) =>
     $cancelled &&
     `
-    opacity: 0.75;
-    border-style: dashed;
+    opacity: 0.62;
   `}
 `
 
-const ApptHeader = styled.div`
+const TimeCol = styled.div`
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3125rem;
+  width: 4.25rem;
+  flex-shrink: 0;
+  padding-top: 0.25rem;
 `
 
-const Time = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 1.15rem;
+const TimeStart = styled.span`
+  font-size: 1rem;
   font-weight: 800;
-  color: var(--color-primary);
+  color: ${({ $secondary }) =>
+    $secondary ? 'var(--color-text-muted)' : 'var(--color-text)'};
   white-space: nowrap;
-
-  @media (max-width: 360px) {
-    font-size: 1rem;
-  }
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 `
 
-const EndTime = styled.span`
-  color: var(--color-primary-strong);
+const TimeEnd = styled.span`
+  font-size: 0.72rem;
   font-weight: 600;
-  font-size: 0.9rem;
+  color: ${({ $secondary }) =>
+    $secondary ? 'var(--color-text-subtle)' : 'var(--color-text-muted)'};
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 `
 
-const FreeSlot = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background: transparent;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-
-  &:hover {
-    background: var(--color-primary-soft);
-    border-color: var(--color-primary);
-  }
-`
-
-const FreeTimeBlock = styled.div`
+const Rail = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.125rem;
-  min-width: 4.5rem;
-  padding-right: 1rem;
-  border-right: 1px solid var(--color-border);
-  color: var(--color-text-muted);
+  width: 1.25rem;
   flex-shrink: 0;
 `
 
-const FreeTimeStart = styled.span`
-  font-size: 0.9rem;
-  font-weight: 700;
-`
-
-const FreeTimeEnd = styled.span`
-  font-size: 0.72rem;
-  color: var(--color-text-subtle);
-`
-
-const FreeLabel = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-`
-
-const FreeDot = styled.span`
+const RailDot = styled.span`
+  position: relative;
+  z-index: 1;
+  margin-top: 0.625rem;
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  border: 2px solid var(--color-text-subtle);
   flex-shrink: 0;
+  box-shadow: 0 0 0 3px var(--color-surface);
+  background: ${({ $hollow, $color }) =>
+    $hollow ? 'var(--color-surface)' : $color || 'var(--color-primary)'};
+  border: ${({ $hollow, $color }) =>
+    $hollow
+      ? '1px solid var(--color-border-strong)'
+      : `1.5px solid ${$color || 'var(--color-primary)'}`};
 `
 
-const FreePlus = styled.span`
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
-  color: var(--color-text-subtle);
-  flex-shrink: 0;
+const RailLine = styled.span`
+  flex: 1;
+  width: 2px;
+  margin-top: 0.1875rem;
+  background: var(--color-border);
 `
 
-const Name = styled.p`
-  margin: 0;
-  font-weight: 800;
-  color: var(--color-text);
-  font-size: 1.05rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+const Content = styled.div`
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.125rem 0 1.25rem;
+
+  ${({ $last }) =>
+    $last &&
+    `
+    padding-bottom: 0;
+  `}
+`
+
+const TopRow = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
 `
 
 const NameButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
+  flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   padding: 0;
@@ -355,12 +301,9 @@ const NameButton = styled.button`
   font-weight: 800;
   color: var(--color-text);
   font-size: 1.05rem;
+  line-height: 1.3;
   cursor: pointer;
   text-align: left;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 
   &:hover {
     color: var(--color-primary);
@@ -368,79 +311,29 @@ const NameButton = styled.button`
   }
 `
 
-const ServiceLine = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-`
-
-const Service = styled.p`
+const Name = styled.p`
   margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`
-
-const Duration = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--color-text-subtle);
-  flex-shrink: 0;
-`
-
-const PhoneLine = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-text-subtle);
-  font-variant-numeric: tabular-nums;
-`
-
-const ContactLink = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-
-  &:hover {
-    background: var(--color-primary-soft);
-    color: var(--color-primary);
-    border-color: var(--color-primary);
-  }
-`
-
-const Divider = styled.div`
-  height: 1px;
-  background: var(--color-border);
+  flex: 1;
+  min-width: 0;
+  font-weight: 800;
+  color: var(--color-text);
+  font-size: 1.05rem;
+  line-height: 1.3;
 `
 
 const StatusBadge = styled.button`
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.3rem 0.75rem;
+  gap: 0.3125rem;
+  padding: 0.1rem 0.625rem;
+  border: none;
   border-radius: var(--radius-full);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  cursor: pointer;
-  border: 1px solid ${({ $color }) => $color || 'var(--color-border-strong)'};
+  line-height: 1.4;
   color: ${({ $color }) => $color || 'var(--color-text-muted)'};
-  background: ${({ $soft }) => $soft || 'var(--color-surface)'};
+  background: ${({ $soft }) => $soft || 'var(--color-bg)'};
+  cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   transition: filter 0.15s ease;
@@ -450,89 +343,205 @@ const StatusBadge = styled.button`
   }
 `
 
-const ActionsRow = styled.div`
+const ServiceList = styled.div`
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
 `
 
-const Dot = styled.span`
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 50%;
-  background: currentColor;
+const ServiceRow = styled.div`
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-width: 0;
+`
+
+const ServiceName = styled.span`
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const ServiceDuration = styled.span`
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-subtle);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+`
+
+const TotalRow = styled.div`
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+`
+
+const TotalLabel = styled.span`
+  color: var(--color-text-subtle);
+  font-weight: 600;
+`
+
+const TotalValue = styled.span`
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+`
+
+const DiscountTag = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--color-success-soft);
+  color: var(--color-success);
+`
+
+const PhoneLine = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+`
+
+const DropdownWrap = styled.div`
+  position: relative;
   flex-shrink: 0;
 `
 
-const InvoiceButton = styled.button`
+const DropdownButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  flex: 1 1 auto;
-  white-space: nowrap;
-  padding: 0.5rem 0.85rem;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-sm);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-size: 0.8rem;
-  font-weight: 800;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-subtle);
+  font-size: 1.05rem;
+  line-height: 0;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 
-  &:hover {
-    background: var(--color-primary-strong);
-    border-color: var(--color-primary-strong);
-  }
-`
-
-const EditButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  flex: 1 1 auto;
-  white-space: nowrap;
-  padding: 0.5rem 0.85rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.8rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-
-  &:hover {
-    background: var(--color-bg);
-    border-color: var(--color-primary);
+  &:hover,
+  &:focus-visible {
+    background: var(--color-primary-soft);
     color: var(--color-primary);
   }
 `
 
-const CancelButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  flex: 1 1 auto;
-  white-space: nowrap;
-  padding: 0.5rem 0.85rem;
-  border: 1px solid var(--color-danger-border);
-  border-radius: var(--radius-sm);
+const Menu = styled.div`
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.375rem);
+  z-index: 30;
+  min-width: 12rem;
+  padding: 0.375rem;
   background: var(--color-surface);
-  color: var(--color-danger);
-  font-size: 0.8rem;
-  font-weight: 800;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+`
+
+const MenuDivider = styled.div`
+  height: 1px;
+  margin: 0.375rem 0.25rem;
+  background: var(--color-border);
+`
+
+const menuItemCss = css`
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: ${({ $danger }) =>
+    $danger ? 'var(--color-danger)' : 'var(--color-text)'};
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  text-align: left;
+  text-decoration: none;
+  transition: background 0.15s ease;
 
   &:hover {
-    background: var(--color-danger-soft);
-    border-color: var(--color-danger);
+    background: ${({ $danger }) =>
+      $danger ? 'var(--color-danger-soft)' : 'var(--color-bg)'};
   }
+`
+
+const MenuItem = styled.button`
+  ${menuItemCss}
+`
+
+const MenuLink = styled.a`
+  ${menuItemCss}
+`
+
+const FreeLabel = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-subtle);
+`
+
+const FreePlus = styled.span`
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-primary);
+`
+
+const FreeSlotContent = styled.div`
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0.3125rem 0 1.25rem;
+
+  ${({ $last }) =>
+    $last &&
+    `
+    padding-bottom: 0;
+  `}
+`
+
+const FreeSlotButton = styled.button`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 `
 
 const Loading = styled.div`
@@ -548,12 +557,16 @@ const ErrorWrap = styled.div`
   padding: 1.25rem;
 `
 
-const PickerWrap = styled.div`
-  position: relative;
+const NoticeWrap = styled.div`
+  padding: 0.75rem 1.5rem 0;
 
   @media (max-width: 767px) {
-    order: 3;
+    padding: 0.75rem 1rem 0;
   }
+`
+
+const PickerWrap = styled.div`
+  position: relative;
 `
 
 const Popover = styled.div`
@@ -703,6 +716,19 @@ function formatPhone(phone) {
     : digits
 }
 
+function formatDateShort(dateString) {
+  const [y, m, d] = dateString.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const text = new Intl.DateTimeFormat('es-CO', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'long',
+  })
+    .format(date)
+    .replace('.', '')
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 function DayCalendar({ onOpenClient }) {
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date()
@@ -714,6 +740,7 @@ function DayCalendar({ onOpenClient }) {
   const [appointments, setAppointments] = useState([])
   const [clients, setClients] = useState([])
   const [services, setServices] = useState([])
+  const [discounts, setDiscounts] = useState([])
   const [schedule, setSchedule] = useState(null)
   const [statusAppt, setStatusAppt] = useState(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -724,6 +751,7 @@ function DayCalendar({ onOpenClient }) {
   const [cancelAppt, setCancelAppt] = useState(null)
   const [notice, setNotice] = useState(null)
   const [reloadToken, setReloadToken] = useState(0)
+  const [openMenu, setOpenMenu] = useState(null)
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
@@ -743,6 +771,13 @@ function DayCalendar({ onOpenClient }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!openMenu) return
+    const handler = () => setOpenMenu(null)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [openMenu])
+
   const dateKey = formatDateString(selectedDate)
 
   useEffect(() => {
@@ -750,13 +785,15 @@ function DayCalendar({ onOpenClient }) {
 
     const load = async () => {
       try {
-        const [clientList, serviceList] = await Promise.all([
+        const [clientList, serviceList, discountList] = await Promise.all([
           fetchClients(),
           fetchServices(),
+          fetchDiscounts(),
         ])
         if (cancelled) return
         setClients(clientList)
         setServices(serviceList)
+        setDiscounts(discountList)
       } catch (err) {
         console.error(err)
       }
@@ -936,46 +973,55 @@ function DayCalendar({ onOpenClient }) {
   })()
 
   const handleStatusChange = async (appt, status) => {
+    const pointsAwarded = await syncAppointmentPoints({
+      appointment: appt,
+      services,
+      newStatus: status,
+    })
     await updateAppointmentStatus(appt.id, status)
     setAppointments((prev) =>
-      prev.map((a) => (a.id === appt.id ? { ...a, status } : a)),
+      prev.map((a) => (a.id === appt.id ? { ...a, status, pointsAwarded } : a)),
     )
   }
 
   const handleCancelAppointment = async (appt) => {
+    const pointsAwarded = await syncAppointmentPoints({
+      appointment: appt,
+      services,
+      newStatus: APPOINTMENT_STATUS.CANCELLED,
+    })
     await updateAppointmentStatus(appt.id, APPOINTMENT_STATUS.CANCELLED)
     setAppointments((prev) =>
       prev.map((a) =>
-        a.id === appt.id ? { ...a, status: APPOINTMENT_STATUS.CANCELLED } : a,
+        a.id === appt.id
+          ? { ...a, status: APPOINTMENT_STATUS.CANCELLED, pointsAwarded }
+          : a,
       ),
     )
     showNotice('success', 'Cita cancelada correctamente.')
   }
 
-  const attendedByClient = useMemo(() => {
-    const groups = new Map()
-    for (const appt of appointments) {
-      if (appt.status !== APPOINTMENT_STATUS.ATTENDED) continue
-      if (!groups.has(appt.clientId)) groups.set(appt.clientId, [])
-      groups.get(appt.clientId).push(appt)
-    }
-    return groups
-  }, [appointments])
-
   const handleDownloadInvoice = (appt) => {
-    const group = attendedByClient.get(appt.clientId) || [appt]
-    const { blob, code, filename } = generateInvoice({
+    const { blob, code, filename, data } = generateInvoice({
       client: clientMap[appt.clientId],
-      items: group.map((a) => ({
-        service: serviceMap[a.serviceId],
-        appointment: a,
+      items: getAppointmentServices(appt, serviceMap).map((service) => ({
+        service,
+        appointment: appt,
       })),
+      discount:
+        appt.discountPercent != null
+          ? {
+              title: appt.discountTitle,
+              percent: appt.discountPercent,
+            }
+          : null,
     })
     setInvoice({
       url: URL.createObjectURL(blob),
       blob,
       code,
       filename,
+      data,
     })
   }
 
@@ -1010,6 +1056,193 @@ function DayCalendar({ onOpenClient }) {
 
   const isToday = isSameDay(selectedDate, new Date())
   const closed = isSunday(selectedDate)
+
+  const renderAppointment = (appt, isLast) => {
+    const client = clientMap[appt.clientId]
+    const statusMeta = STATUS_META[appt.status]
+    const StatusIcon = statusMeta?.Icon
+    const apptServices = getAppointmentServices(appt, serviceMap)
+    const totalDuration = apptTotalDuration(appt, serviceMap)
+    const cancelled = appt.status === APPOINTMENT_STATUS.CANCELLED
+
+    return (
+      <Entry key={appt.id} $cancelled={cancelled}>
+        <TimeCol>
+          <TimeStart>{formatTime12h(appt.startTime)}</TimeStart>
+          <TimeEnd>{formatTime12h(appt.endTime)}</TimeEnd>
+        </TimeCol>
+        <Rail>
+          <RailDot $color={statusMeta?.color} />
+          <RailLine />
+        </Rail>
+        <Content $last={isLast}>
+          <TopRow>
+            {client ? (
+              <NameButton
+                type="button"
+                onClick={() => onOpenClient?.(appt.clientId)}
+                title="Ver ficha del cliente"
+              >
+                {client.name}
+              </NameButton>
+            ) : (
+              <Name>Cliente</Name>
+            )}
+            <StatusBadge
+              type="button"
+              $color={statusMeta?.color}
+              $soft={statusMeta?.soft}
+              onClick={() => setStatusAppt(appt)}
+              title="Cambiar estado"
+            >
+              {StatusIcon ? <StatusIcon size={11} /> : null}
+              {statusMeta ? statusMeta.label : 'Sin estado'}
+            </StatusBadge>
+            <DropdownWrap>
+              <DropdownButton
+                type="button"
+                aria-label="Más opciones"
+                title="Más opciones"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() =>
+                  setOpenMenu((m) =>
+                    m?.apptId === appt.id ? null : { apptId: appt.id },
+                  )
+                }
+              >
+                <LuEllipsisVertical size={18} />
+              </DropdownButton>
+              {openMenu?.apptId === appt.id && (
+                <Menu onMouseDown={(e) => e.stopPropagation()}>
+                  <MenuItem
+                    type="button"
+                    onClick={() => {
+                      setOpenMenu(null)
+                      setEditAppt(appt)
+                    }}
+                  >
+                    <LuPencil size={15} color="var(--color-primary)" />
+                    Editar
+                  </MenuItem>
+                  <MenuItem
+                    type="button"
+                    onClick={() => {
+                      setOpenMenu(null)
+                      handleDownloadInvoice(appt)
+                    }}
+                  >
+                    <LuReceipt size={15} color="var(--color-gold-ink)" />
+                    Ver factura
+                  </MenuItem>
+                  {(client?.phone || client?.email) && (
+                    <>
+                      <MenuDivider />
+                      {client?.phone && (
+                        <>
+                          <MenuLink
+                            href={`https://wa.me/57${client.phone}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => setOpenMenu(null)}
+                          >
+                            <LuMessageCircle size={15} color="var(--color-success)" />
+                            WhatsApp
+                          </MenuLink>
+                          <MenuLink
+                            href={`tel:+57${client.phone}`}
+                            onClick={() => setOpenMenu(null)}
+                          >
+                            <LuPhone size={15} color="var(--color-primary-strong)" />
+                            Teléfono
+                          </MenuLink>
+                        </>
+                      )}
+                      {client?.email && (
+                        <MenuLink
+                          href={`mailto:${client.email}`}
+                          onClick={() => setOpenMenu(null)}
+                        >
+                          <LuMail size={15} color="var(--color-gold-ink)" />
+                          Correo
+                        </MenuLink>
+                      )}
+                    </>
+                  )}
+                </Menu>
+              )}
+            </DropdownWrap>
+          </TopRow>
+
+          <ServiceList>
+            {apptServices.length > 0 ? (
+              apptServices.map((s) => (
+                <ServiceRow key={s.id}>
+                  <ServiceName>{s.name}</ServiceName>
+                  {s.duration ? (
+                    <ServiceDuration>
+                      {formatDuration(s.duration)}
+                    </ServiceDuration>
+                  ) : null}
+                </ServiceRow>
+              ))
+            ) : (
+              <ServiceRow>
+                <ServiceName>Servicio</ServiceName>
+              </ServiceRow>
+            )}
+            {totalDuration ? (
+              <TotalRow>
+                <TotalLabel>Total</TotalLabel>
+                <TotalValue>{formatDuration(totalDuration)}</TotalValue>
+                {appt.discountTitle && appt.discountPercent != null && (
+                  <DiscountTag title={appt.discountTitle}>
+                    -{appt.discountPercent}%
+                  </DiscountTag>
+                )}
+              </TotalRow>
+            ) : null}
+          </ServiceList>
+
+          {client?.phone && (
+            <PhoneLine>
+              <LuPhone size={11} />
+              {formatPhone(client.phone)}
+            </PhoneLine>
+          )}
+        </Content>
+      </Entry>
+    )
+  }
+
+  const renderFreeSlot = (entry, isLast) => {
+    return (
+      <Entry key={`free-${entry.startTime}-${entry.endTime}`}>
+        <TimeCol>
+          <TimeStart $secondary>{formatTime12h(entry.startTime)}</TimeStart>
+          <TimeEnd $secondary>{formatTime12h(entry.endTime)}</TimeEnd>
+        </TimeCol>
+        <Rail>
+          <RailDot $hollow />
+          <RailLine />
+        </Rail>
+        <FreeSlotContent $last={isLast}>
+          <FreeSlotButton
+            type="button"
+            onClick={() => {
+              setPresetTime(entry.startTime)
+              setShowNewAppt(true)
+            }}
+            aria-label={`Nueva cita a las ${formatTime12h(entry.startTime)}`}
+          >
+            <FreeLabel>Disponible</FreeLabel>
+            <FreePlus>
+              <FaPlus size={13} />
+            </FreePlus>
+          </FreeSlotButton>
+        </FreeSlotContent>
+      </Entry>
+    )
+  }
 
   const renderBody = () => {
     if (loading) {
@@ -1052,137 +1285,12 @@ function DayCalendar({ onOpenClient }) {
 
     return (
       <List>
-        {dayEntries.map((entry) => {
+        {dayEntries.map((entry, index) => {
+          const isLast = index === dayEntries.length - 1
           if (entry.type === 'free') {
-            return (
-              <FreeSlot
-                key={`free-${entry.startTime}-${entry.endTime}`}
-                type="button"
-                onClick={() => {
-                  setPresetTime(entry.startTime)
-                  setShowNewAppt(true)
-                }}
-                aria-label={`Nueva cita a las ${formatTime12h(entry.startTime)}`}
-              >
-                <FreeTimeBlock>
-                  <FreeTimeStart>{formatTime12h(entry.startTime)}</FreeTimeStart>
-                  <FreeTimeEnd>{formatTime12h(entry.endTime)}</FreeTimeEnd>
-                </FreeTimeBlock>
-                <FreeLabel>
-                  <FreeDot />
-                  Disponible
-                </FreeLabel>
-                <FreePlus>
-                  <FaPlus size={14} />
-                </FreePlus>
-              </FreeSlot>
-            )
+            return renderFreeSlot(entry, isLast)
           }
-
-          const appt = entry.appt
-          const client = clientMap[appt.clientId]
-          const service = serviceMap[appt.serviceId]
-          const statusMeta = STATUS_META[appt.status]
-          const StatusIcon = statusMeta?.Icon
-          return (
-            <Appointment
-              key={appt.id}
-              $color={statusMeta?.color}
-              $soft={statusMeta?.soft}
-              $cancelled={appt.status === APPOINTMENT_STATUS.CANCELLED}
-            >
-              <ApptHeader>
-                <Time>
-                  <FaClock size={15} />
-                  <span>{formatTime12h(appt.startTime)}</span>
-                  <EndTime>– {formatTime12h(appt.endTime)}</EndTime>
-                </Time>
-                <StatusBadge
-                  type="button"
-                  $color={statusMeta?.color}
-                  $soft={statusMeta?.soft}
-                  onClick={() => setStatusAppt(appt)}
-                  title="Cambiar estado"
-                >
-                  {StatusIcon ? <StatusIcon size={12} /> : <Dot />}
-                  {statusMeta ? statusMeta.label : 'Sin estado'}
-                </StatusBadge>
-              </ApptHeader>
-
-              {client ? (
-                <NameButton
-                  type="button"
-                  onClick={() => onOpenClient?.(appt.clientId)}
-                  title="Ver ficha del cliente"
-                >
-                  <FaUser size={13} />
-                  {client.name}
-                </NameButton>
-              ) : (
-                <Name>Cliente</Name>
-              )}
-
-              <ServiceLine>
-                <Service>{service ? service.name : 'Servicio'}</Service>
-                {service?.duration ? (
-                  <Duration>
-                    <FaClock size={11} />
-                    {formatDuration(service.duration)}
-                  </Duration>
-                ) : null}
-              </ServiceLine>
-
-              {client?.phone && (
-                <PhoneLine>
-                  <FaPhone size={11} />
-                  {formatPhone(client.phone)}
-                </PhoneLine>
-              )}
-
-              <Divider />
-
-              <ActionsRow>
-                {client?.phone && (
-                  <>
-                    <ContactLink
-                      href={`https://wa.me/57${client.phone}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="WhatsApp"
-                      aria-label="Enviar WhatsApp"
-                    >
-                      <FaWhatsapp size={18} />
-                    </ContactLink>
-                    <ContactLink
-                      href={`tel:+57${client.phone}`}
-                      title="Llamar"
-                      aria-label="Llamar"
-                    >
-                      <FaPhone size={16} />
-                    </ContactLink>
-                  </>
-                )}
-                <EditButton type="button" onClick={() => setEditAppt(appt)}>
-                  <FaPencil size={13} />
-                  Editar
-                </EditButton>
-                {appt.status === APPOINTMENT_STATUS.CONFIRMED && (
-                  <CancelButton type="button" onClick={() => setCancelAppt(appt)}>
-                    <FaBan size={13} />
-                    Cancelar
-                  </CancelButton>
-                )}
-                {appt.status === APPOINTMENT_STATUS.ATTENDED && (
-                  <InvoiceButton type="button" onClick={() => handleDownloadInvoice(appt)}>
-                    <FaFilePdf size={13} />
-                    {(attendedByClient.get(appt.clientId)?.length ?? 1) > 1
-                      ? `Factura (${attendedByClient.get(appt.clientId).length})`
-                      : 'Factura'}
-                  </InvoiceButton>
-                )}
-              </ActionsRow>
-            </Appointment>
-          )
+          return renderAppointment(entry.appt, isLast)
         })}
       </List>
     )
@@ -1190,161 +1298,162 @@ function DayCalendar({ onOpenClient }) {
 
   return (
     <>
-    <Card>
-      {notice && (
-        <div style={{ padding: '0.75rem 1.25rem 0' }}>
-          <Alert
-            tone={notice.tone}
-            icon={
-              notice.tone === 'success' ? (
-                <FaCircleCheck size={16} />
-              ) : (
-                <FaTriangleExclamation size={16} />
-              )
-            }
-          >
-            {notice.text}
-          </Alert>
-        </div>
-      )}
-      <Header>
-        <HeaderText>
-          <HeaderIcon>
-            <FaCalendarDays size={18} />
-          </HeaderIcon>
-          <div>
+      <Card>
+        {notice && (
+          <NoticeWrap>
+            <Alert
+              tone={notice.tone}
+              icon={
+                notice.tone === 'success' ? (
+                  <FaCircleCheck size={16} />
+                ) : (
+                  <FaTriangleExclamation size={16} />
+                )
+              }
+            >
+              {notice.text}
+            </Alert>
+          </NoticeWrap>
+        )}
+        <Header>
+          <HeaderText>
             <HeaderTitle>{isToday ? 'Citas de hoy' : 'Citas del día'}</HeaderTitle>
             <HeaderSub>
-              {formatDateLong(dateKey)}
+              {formatDateShort(dateKey)}
               {!closed &&
                 ` · ${appointments.length} ${appointments.length === 1 ? 'cita' : 'citas'}`}
             </HeaderSub>
-          </div>
-        </HeaderText>
+          </HeaderText>
 
-        <Controls>
-          <NewAppointmentButton
-            type="button"
-            onClick={() => {
-              setPresetTime('')
-              setShowNewAppt(true)
-            }}
-          >
-            <FaPlus size={14} />
-            Nueva cita
-          </NewAppointmentButton>
-          <PickerWrap ref={pickerRef}>
-            <NavButton
-              type="button"
-              onClick={togglePicker}
-              aria-label="Seleccionar día en el calendario"
-            >
-              <FaCalendarDay size={16} />
-            </NavButton>
-            {pickerOpen && (
-              <Popover>
-                <PopHeader>
-                  <PopNav
-                    type="button"
-                    onClick={goToPrevMonth}
-                    aria-label="Mes anterior"
-                  >
-                    <FaAngleLeft size={14} />
-                  </PopNav>
-                  <PopTitle>{monthLabel}</PopTitle>
-                  <PopNav
-                    type="button"
-                    onClick={goToNextMonth}
-                    aria-label="Mes siguiente"
-                  >
-                    <FaAngleRight size={14} />
-                  </PopNav>
-                </PopHeader>
-                <WeekLabels>
-                  {WEEKDAY_LABELS.map((label) => (
-                    <WeekLabel key={label}>{label}</WeekLabel>
-                  ))}
-                </WeekLabels>
-                <DaysGrid>
-                  {monthGrid.map((day) => {
-                    const inMonth = day.getMonth() === viewMonth.getMonth()
-                    const selected = isSameDay(day, selectedDate)
-                    const today = isSameDay(day, new Date())
-                    const disabled = !inMonth || isSunday(day)
-                    return (
-                      <DayCell
-                        key={day.getTime()}
+          <HeaderControls>
+            <NavGroup>
+              <PickerWrap ref={pickerRef}>
+                <NavButton
+                  type="button"
+                  onClick={togglePicker}
+                  aria-label="Seleccionar día en el calendario"
+                >
+                  <FaCalendarDay size={16} />
+                </NavButton>
+                {pickerOpen && (
+                  <Popover>
+                    <PopHeader>
+                      <PopNav
                         type="button"
-                        $outside={!inMonth}
-                        $selected={selected}
-                        $today={today}
-                        $disabled={disabled}
-                        disabled={disabled}
-                        onClick={() => pickDay(day)}
+                        onClick={goToPrevMonth}
+                        aria-label="Mes anterior"
                       >
-                        {day.getDate()}
-                      </DayCell>
-                    )
-                  })}
-                </DaysGrid>
-              </Popover>
-            )}
-          </PickerWrap>
-          <DayNav>
-            <TodayButton type="button" onClick={goToToday}>
-              Hoy
-            </TodayButton>
-            <NavButton type="button" onClick={goToPrevDay} aria-label="Día anterior">
-              <FaAngleLeft size={16} />
-            </NavButton>
-            <NavButton type="button" onClick={goToNextDay} aria-label="Día siguiente">
-              <FaAngleRight size={16} />
-            </NavButton>
-          </DayNav>
-        </Controls>
-      </Header>
+                        <FaAngleLeft size={14} />
+                      </PopNav>
+                      <PopTitle>{monthLabel}</PopTitle>
+                      <PopNav
+                        type="button"
+                        onClick={goToNextMonth}
+                        aria-label="Mes siguiente"
+                      >
+                        <FaAngleRight size={14} />
+                      </PopNav>
+                    </PopHeader>
+                    <WeekLabels>
+                      {WEEKDAY_LABELS.map((label) => (
+                        <WeekLabel key={label}>{label}</WeekLabel>
+                      ))}
+                    </WeekLabels>
+                    <DaysGrid>
+                      {monthGrid.map((day) => {
+                        const inMonth = day.getMonth() === viewMonth.getMonth()
+                        const selected = isSameDay(day, selectedDate)
+                        const today = isSameDay(day, new Date())
+                        const disabled = !inMonth || isSunday(day)
+                        return (
+                          <DayCell
+                            key={day.getTime()}
+                            type="button"
+                            $outside={!inMonth}
+                            $selected={selected}
+                            $today={today}
+                            $disabled={disabled}
+                            disabled={disabled}
+                            onClick={() => pickDay(day)}
+                          >
+                            {day.getDate()}
+                          </DayCell>
+                        )
+                      })}
+                    </DaysGrid>
+                  </Popover>
+                )}
+              </PickerWrap>
+              <NavButton type="button" onClick={goToPrevDay} aria-label="Día anterior">
+                <FaAngleLeft size={16} />
+              </NavButton>
+              <TodayButton type="button" onClick={goToToday}>
+                Hoy
+              </TodayButton>
+              <NavButton type="button" onClick={goToNextDay} aria-label="Día siguiente">
+                <FaAngleRight size={16} />
+              </NavButton>
+            </NavGroup>
+            <NewAppointmentButton
+              type="button"
+              onClick={() => {
+                setPresetTime('')
+                setShowNewAppt(true)
+              }}
+            >
+              <FaPlus size={14} />
+              Nueva cita
+            </NewAppointmentButton>
+          </HeaderControls>
+        </Header>
 
-      {renderBody()}
-    </Card>
-    {invoice && <InvoiceModal data={invoice} onClose={closeInvoice} />}
-    {showNewAppt && (
-      <NewAppointmentModal
-        initialDate={selectedDate}
-        initialTime={presetTime}
-        clients={clients}
-        services={services}
-        onCreated={handleAppointmentCreated}
-        onClose={() => setShowNewAppt(false)}
-      />
-    )}
-    {statusAppt && (
-      <AppointmentStatusModal
-        appointment={statusAppt}
-        client={clientMap[statusAppt.clientId]}
-        service={serviceMap[statusAppt.serviceId]}
-        onSave={(status) => handleStatusChange(statusAppt, status)}
-        onClose={() => setStatusAppt(null)}
-      />
-    )}
-    {editAppt && (
-      <NewAppointmentModal
-        appointment={editAppt}
-        initialDate={selectedDate}
-        clients={clients}
-        services={services}
-        onEdited={handleAppointmentEdited}
-        onClose={() => setEditAppt(null)}
-      />
-    )}
-    {cancelAppt && (
-      <CancelAppointmentModal
-        appointment={cancelAppt}
-        client={clientMap[cancelAppt.clientId]}
-        service={serviceMap[cancelAppt.serviceId]}
-        onConfirm={() => handleCancelAppointment(cancelAppt)}
-        onClose={() => setCancelAppt(null)}
-      />
-    )}
+        {renderBody()}
+      </Card>
+      {invoice && <InvoiceModal data={invoice} onClose={closeInvoice} />}
+      {showNewAppt && (
+        <NewAppointmentModal
+          initialDate={selectedDate}
+          initialTime={presetTime}
+          clients={clients}
+          services={services}
+          discounts={discounts}
+          onCreated={handleAppointmentCreated}
+          onClose={() => setShowNewAppt(false)}
+        />
+      )}
+      {statusAppt && (
+        <AppointmentStatusModal
+          appointment={statusAppt}
+          client={clientMap[statusAppt.clientId]}
+          services={getAppointmentServices(statusAppt, serviceMap)}
+          onSave={(status) => handleStatusChange(statusAppt, status)}
+          onCancel={() => {
+            setCancelAppt(statusAppt)
+            setStatusAppt(null)
+          }}
+          onClose={() => setStatusAppt(null)}
+        />
+      )}
+      {editAppt && (
+        <NewAppointmentModal
+          appointment={editAppt}
+          initialDate={selectedDate}
+          clients={clients}
+          services={services}
+          discounts={discounts}
+          onEdited={handleAppointmentEdited}
+          onClose={() => setEditAppt(null)}
+        />
+      )}
+      {cancelAppt && (
+        <CancelAppointmentModal
+          appointment={cancelAppt}
+          client={clientMap[cancelAppt.clientId]}
+          services={getAppointmentServices(cancelAppt, serviceMap)}
+          onConfirm={() => handleCancelAppointment(cancelAppt)}
+          onClose={() => setCancelAppt(null)}
+        />
+      )}
     </>
   )
 }

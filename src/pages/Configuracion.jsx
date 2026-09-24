@@ -43,12 +43,32 @@ const Notice = styled.div`
   margin-bottom: 1rem;
 `
 
+const SectionTitle = styled.h2`
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+  color: var(--color-text);
+`
+
 const Form = styled.form`
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+`
+
+const Section = styled.section`
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+
+  & + & {
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--color-border);
+  }
 `
 
 const Row = styled.div`
@@ -99,13 +119,14 @@ function toMinutes(time) {
   return h * 60 + m
 }
 
-function Horarios() {
+function Configuracion() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(null)
   const [errors, setErrors] = useState({})
   const [values, setValues] = useState({
+    adminPhone: '',
     openTime: '09:00',
     closeTime: '19:00',
     slotStep: '',
@@ -132,6 +153,7 @@ function Horarios() {
     try {
       const schedule = await getSchedule()
       setValues({
+        adminPhone: schedule.adminPhone ?? '',
         openTime: schedule.openTime,
         closeTime: schedule.closeTime,
         slotStep: schedule.slotStep ? String(schedule.slotStep) : '',
@@ -157,6 +179,13 @@ function Horarios() {
 
   const validate = () => {
     const nextErrors = {}
+
+    if (values.adminPhone.trim() !== '') {
+      const phoneDigits = values.adminPhone.replace(/\D/g, '')
+      if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+        nextErrors.adminPhone = 'Ingresá un número de teléfono válido.'
+      }
+    }
 
     if (!TIME_RE.test(values.openTime)) {
       nextErrors.openTime = 'Ingresá una hora de apertura válida (HH:MM).'
@@ -203,15 +232,16 @@ function Horarios() {
     setSaving(true)
     try {
       await saveSchedule({
+        adminPhone: values.adminPhone.replace(/\D/g, ''),
         openTime: values.openTime,
         closeTime: values.closeTime,
         slotStep: values.slotStep === '' ? 0 : Number(values.slotStep),
         daysAhead: Number(values.daysAhead),
       })
-      showNotice('success', 'Horario guardado correctamente.')
+      showNotice('success', 'Configuración guardada correctamente.')
     } catch (err) {
       console.error(err)
-      showNotice('error', 'No se pudo guardar el horario.')
+      showNotice('error', 'No se pudo guardar la configuración.')
     } finally {
       setSaving(false)
     }
@@ -221,8 +251,8 @@ function Horarios() {
     <Wrapper>
       <PageHeader>
         <div>
-          <Title>Horarios</Title>
-          <Subtitle>Configurá el horario de atención de tu negocio.</Subtitle>
+          <Title>Configuración</Title>
+          <Subtitle>Configurá los datos de tu negocio y el horario de atención.</Subtitle>
         </div>
       </PageHeader>
 
@@ -246,12 +276,12 @@ function Horarios() {
       {loading ? (
         <Loading>
           <Spinner />
-          Cargando horario...
+          Cargando configuración...
         </Loading>
       ) : loadError ? (
         <ErrorWrap>
           <Alert tone="error" icon={<FaTriangleExclamation size={16} />}>
-            No se pudo cargar el horario.
+            No se pudo cargar la configuración.
           </Alert>
           <Button type="button" onClick={load}>
             Reintentar
@@ -259,79 +289,107 @@ function Horarios() {
         </ErrorWrap>
       ) : (
         <Form onSubmit={handleSubmit}>
-          <Row>
+          <Section>
+            <SectionTitle>Datos del negocio</SectionTitle>
             <Field>
-              <Label htmlFor="schedule-open">Apertura</Label>
+              <Label htmlFor="config-admin-phone">Teléfono de la administradora</Label>
               <Input
-                id="schedule-open"
-                name="openTime"
-                type="time"
-                value={values.openTime}
+                id="config-admin-phone"
+                name="adminPhone"
+                type="tel"
+                value={values.adminPhone}
                 onChange={handleChange}
-                $invalid={!!errors.openTime}
+                placeholder="Ej.: 3001234567"
+                inputMode="numeric"
+                $invalid={!!errors.adminPhone}
               />
-              {errors.openTime && <ErrorText>{errors.openTime}</ErrorText>}
-            </Field>
-
-            <Field>
-              <Label htmlFor="schedule-close">Cierre</Label>
-              <Input
-                id="schedule-close"
-                name="closeTime"
-                type="time"
-                value={values.closeTime}
-                onChange={handleChange}
-                $invalid={!!errors.closeTime}
-              />
-              {errors.closeTime && <ErrorText>{errors.closeTime}</ErrorText>}
-            </Field>
-          </Row>
-
-          <Row>
-            <Field>
-              <Label htmlFor="schedule-step">Intervalo entre turnos (minutos)</Label>
-              <Input
-                id="schedule-step"
-                name="slotStep"
-                type="number"
-                min="0"
-                value={values.slotStep}
-                onChange={handleChange}
-                placeholder="Automático (duración del servicio)"
-                $invalid={!!errors.slotStep}
-              />
-              {errors.slotStep ? (
-                <ErrorText>{errors.slotStep}</ErrorText>
+              {errors.adminPhone ? (
+                <ErrorText>{errors.adminPhone}</ErrorText>
               ) : (
                 <Hint>
-                  Dejá el campo vacío (o en 0) para que cada turno se ajuste a la
-                  duración del servicio.
+                  Se usa para que las clientas puedan contactarte (p. ej. por
+                  WhatsApp).
                 </Hint>
               )}
             </Field>
+          </Section>
 
-            <Field>
-              <Label htmlFor="schedule-days">Días a futuro</Label>
-              <Input
-                id="schedule-days"
-                name="daysAhead"
-                type="number"
-                min="1"
-                max="6"
-                value={values.daysAhead}
-                onChange={handleChange}
-                $invalid={!!errors.daysAhead}
-              />
-              {errors.daysAhead ? (
-                <ErrorText>{errors.daysAhead}</ErrorText>
-              ) : (
-                <Hint>
-                  Días habilitados para agendar (mín. 1, máx. 6). Incluye el día
-                  de hoy.
-                </Hint>
-              )}
-            </Field>
-          </Row>
+          <Section>
+            <SectionTitle>Horarios de atención</SectionTitle>
+            <Row>
+              <Field>
+                <Label htmlFor="schedule-open">Apertura</Label>
+                <Input
+                  id="schedule-open"
+                  name="openTime"
+                  type="time"
+                  value={values.openTime}
+                  onChange={handleChange}
+                  $invalid={!!errors.openTime}
+                />
+                {errors.openTime && <ErrorText>{errors.openTime}</ErrorText>}
+              </Field>
+
+              <Field>
+                <Label htmlFor="schedule-close">Cierre</Label>
+                <Input
+                  id="schedule-close"
+                  name="closeTime"
+                  type="time"
+                  value={values.closeTime}
+                  onChange={handleChange}
+                  $invalid={!!errors.closeTime}
+                />
+                {errors.closeTime && <ErrorText>{errors.closeTime}</ErrorText>}
+              </Field>
+            </Row>
+
+            <Row>
+              <Field>
+                <Label htmlFor="schedule-step">Intervalo entre turnos (minutos)</Label>
+                <Input
+                  id="schedule-step"
+                  name="slotStep"
+                  type="number"
+                  min="0"
+                  value={values.slotStep}
+                  onChange={handleChange}
+                  placeholder="Automático (duración del servicio)"
+                  $invalid={!!errors.slotStep}
+                />
+                {errors.slotStep ? (
+                  <ErrorText>{errors.slotStep}</ErrorText>
+                ) : (
+                  <Hint>
+                    Dejá el campo vacío (o en 0) para que cada turno se ajuste a la
+                    duración del servicio.
+                  </Hint>
+                )}
+              </Field>
+
+              <Field>
+                <Label htmlFor="schedule-days">Días a futuro</Label>
+                <Input
+                  id="schedule-days"
+                  name="daysAhead"
+                  type="number"
+                  min="1"
+                  max="6"
+                  value={values.daysAhead}
+                  onChange={handleChange}
+                  $invalid={!!errors.daysAhead}
+                />
+                {errors.daysAhead ? (
+                  <ErrorText>{errors.daysAhead}</ErrorText>
+                ) : (
+                  <Hint>
+                    Días habilitados para agendar (mín. 1, máx. 6). Incluye el día
+                    de hoy.
+                  </Hint>
+                )}
+              </Field>
+            </Row>
+          </Section>
 
           <Actions>
             <Button type="submit" disabled={saving}>
@@ -343,7 +401,7 @@ function Horarios() {
               ) : (
                 <>
                   <FaClock size={14} />
-                  Guardar horario
+                  Guardar configuración
                 </>
               )}
             </Button>
@@ -354,4 +412,4 @@ function Horarios() {
   )
 }
 
-export default Horarios
+export default Configuracion

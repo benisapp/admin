@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import styled from 'styled-components'
 import {
   FaCalendarDay,
+  FaCheck,
   FaClock,
   FaMagnifyingGlass,
   FaPencil,
@@ -17,8 +18,14 @@ import {
   getAppointmentsByDate,
   updateAppointment,
 } from '../appointments'
-import { createClient } from '../clients'
+import NewClientModal from './NewClientModal'
 import { getSchedule } from '../settings'
+import { isServiceAvailable } from '../services'
+import {
+  applyDiscountToTotal,
+  getApplicableDiscounts,
+  getDefaultDiscount,
+} from '../discounts'
 import {
   formatDateString,
   formatTime12h,
@@ -26,6 +33,7 @@ import {
   isSunday,
   overlaps,
 } from '../utils/dates'
+import { formatDuration, formatPrice } from '../utils/format'
 
 const Overlay = styled.div`
   position: fixed;
@@ -96,27 +104,48 @@ const Form = styled.form`
   flex-direction: column;
 `
 
-const Select = styled.select`
-  width: 100%;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--color-border-strong);
+const ServiceGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  gap: 0.5rem;
+`
+
+const ServiceChip = styled.button`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid
+    ${({ $active }) =>
+      $active ? 'var(--color-primary)' : 'var(--color-border-strong)'};
   border-radius: var(--radius-sm);
-  font-size: 0.9rem;
-  color: var(--color-text);
-  background: var(--color-surface);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: ${({ $active }) =>
+    $active ? 'var(--color-primary-soft)' : 'var(--color-surface)'};
+  color: ${({ $active }) =>
+    $active ? 'var(--color-primary)' : 'var(--color-text)'};
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 
-  &:focus {
-    outline: none;
+  &:hover {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-primary-soft);
   }
+`
 
-  ${({ $invalid }) =>
-    $invalid &&
-    `
-    border-color: var(--color-danger);
-  `}
+const ServiceChipName = styled.span`
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+`
+
+const ServiceChipMeta = styled.span`
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
 `
 
 const Row = styled.div`
@@ -277,24 +306,6 @@ const ClearClientButton = styled.button`
   }
 `
 
-const BackButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  margin-top: 0.5rem;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-primary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-
-  &:hover {
-    text-decoration: underline;
-  }
-`
-
 const SlotGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(6.25rem, 1fr));
@@ -326,6 +337,91 @@ const SlotLoading = styled.div`
   font-size: 0.85rem;
 `
 
+const Hint = styled.p`
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+`
+
+const Summary = styled.div`
+  margin-top: 1rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  background: var(--color-bg);
+`
+
+const SummaryRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+`
+
+const DiscountRow = styled(SummaryRow)`
+  color: var(--color-success);
+  font-weight: 600;
+`
+
+const DiscountPicker = styled.div`
+  margin-top: 1rem;
+`
+
+const DiscountPickerTitle = styled.p`
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+`
+
+const DiscountOptions = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`
+
+const DiscountOption = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+  border: 1.5px solid
+    ${({ $selected }) =>
+      $selected ? 'var(--color-primary)' : 'var(--color-border-strong)'};
+  background: ${({ $selected }) =>
+    $selected ? 'var(--color-primary-soft)' : 'var(--color-surface)'};
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+`
+
+const DiscountOptionPercent = styled.span`
+  color: var(--color-success);
+  font-weight: 800;
+  white-space: nowrap;
+`
+
+const TotalRowStyled = styled(SummaryRow)`
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--color-border-strong);
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 800;
+`
+
 const Actions = styled.div`
   display: flex;
   gap: 0.625rem;
@@ -351,6 +447,7 @@ function NewAppointmentModal({
   initialClientId,
   clients,
   services,
+  discounts,
   appointment,
   onCreated,
   onEdited,
@@ -366,10 +463,15 @@ function NewAppointmentModal({
   const [date, setDate] = useState(() => appointment?.date || formatDateString(initialDate || new Date()))
   const [clientId, setClientId] = useState(() => appointment?.clientId || initialClientId || '')
   const [clientQuery, setClientQuery] = useState('')
-  const [creatingNew, setCreatingNew] = useState(false)
+  const [showNewClient, setShowNewClient] = useState(false)
+  const [createdClient, setCreatedClient] = useState(null)
   const [clientListOpen, setClientListOpen] = useState(false)
-  const [newClient, setNewClient] = useState({ name: '', phone: '', email: '' })
-  const [serviceId, setServiceId] = useState(() => appointment?.serviceId || '')
+  const [serviceIds, setServiceIds] = useState(() =>
+    Array.isArray(appointment?.serviceIds) ? [...appointment.serviceIds] : [],
+  )
+  const [selectedDiscountId, setSelectedDiscountId] = useState(
+    () => appointment?.discountId || null,
+  )
   const [startTime, setStartTime] = useState(() => appointment?.startTime || initialTime || '')
   const [dateAppointments, setDateAppointments] = useState([])
   const [loadingSlots, setLoadingSlots] = useState(false)
@@ -381,11 +483,38 @@ function NewAppointmentModal({
   const activeClients = clients
     .filter((c) => c.active !== false)
     .sort((a, b) => a.name.localeCompare(b.name))
-  const activeServices = services.filter((s) => s.active !== false)
+  const activeServices = services.filter((s) => isServiceAvailable(s, date))
 
-  const service = activeServices.find((s) => s.id === serviceId)
+  const selectedServices = activeServices.filter((s) => serviceIds.includes(s.id))
+  const totalDuration = selectedServices.reduce(
+    (sum, s) => sum + (Number(s.duration) || 0),
+    0,
+  )
 
-  const selectedClient = clients.find((c) => c.id === clientId) || null
+  const selectedClient =
+    clients.find((c) => c.id === clientId) ||
+    (createdClient?.id === clientId ? createdClient : null)
+  const applicableDiscounts = getApplicableDiscounts(
+    date,
+    serviceIds,
+    discounts,
+    selectedClient,
+  )
+  const applicableDiscount =
+    applicableDiscounts.find((d) => d.id === selectedDiscountId) ||
+    getDefaultDiscount(applicableDiscounts)
+  const subtotal = selectedServices.reduce(
+    (sum, s) => sum + (Number(s.price) || 0),
+    0,
+  )
+  const pointsToEarn = selectedServices.reduce(
+    (sum, s) => sum + (Number(s.points) || 0),
+    0,
+  )
+  const { discountAmount, total } = applyDiscountToTotal(
+    subtotal,
+    applicableDiscount,
+  )
 
   const clientQueryTrim = clientQuery.trim().toLowerCase()
   const clientQueryNormalized = normalizeText(clientQuery)
@@ -403,7 +532,8 @@ function NewAppointmentModal({
 
   useEffect(() => {
     const onKey = (event) => {
-      if (event.key === 'Escape') onClose()
+      // Mientras el modal de nueva cliente está abierto, Escape lo maneja ese.
+      if (event.key === 'Escape' && !showNewClient) onClose()
     }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
@@ -411,7 +541,7 @@ function NewAppointmentModal({
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [onClose])
+  }, [onClose, showNewClient])
 
   useEffect(() => {
     let cancelled = false
@@ -453,8 +583,8 @@ function NewAppointmentModal({
   }, [clientListOpen])
 
   const slots = useMemo(() => {
-    if (!service || !schedule) return []
-    const all = generateSlots(Number(service.duration), {
+    if (!totalDuration || !schedule) return []
+    const all = generateSlots(totalDuration, {
       open: schedule.openTime,
       close: schedule.closeTime,
       step: schedule.slotStep || 0,
@@ -477,15 +607,17 @@ function NewAppointmentModal({
       }
       return true
     })
-  }, [service, schedule, dateAppointments, date, appointment])
+  }, [totalDuration, schedule, dateAppointments, date, appointment])
 
   const handleDateChange = (event) => {
     setDate(event.target.value)
     setStartTime('')
   }
 
-  const handleServiceChange = (event) => {
-    setServiceId(event.target.value)
+  const toggleService = (id) => {
+    setServiceIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
   }
 
   const handleClientQueryChange = (event) => {
@@ -507,35 +639,27 @@ function NewAppointmentModal({
   }
 
   const openNewClient = () => {
-    setCreatingNew(true)
-    setClientId('')
+    setShowNewClient(true)
+  }
+
+  const handleClientCreated = (client) => {
+    setCreatedClient(client)
+    setClientId(client.id)
     setClientQuery('')
     setClientListOpen(false)
     setErrors((prev) => ({ ...prev, clientId: undefined }))
-  }
-
-  const cancelNewClient = () => {
-    setCreatingNew(false)
-    setNewClient({ name: '', phone: '', email: '' })
-  }
-
-  const handleNewClientChange = (event) => {
-    const { name, value } = event.target
-    setNewClient((prev) => ({ ...prev, [name]: value }))
+    setShowNewClient(false)
   }
 
   const validate = () => {
     const nextErrors = {}
 
-    if (creatingNew) {
-      if (!newClient.name.trim()) nextErrors.name = 'El nombre es obligatorio.'
-      if (!newClient.phone.trim()) nextErrors.phone = 'El teléfono es obligatorio.'
-    } else if (!clientId) {
+    if (!clientId) {
       nextErrors.clientId = 'Elegí una cliente.'
     }
 
-    if (!serviceId) {
-      nextErrors.serviceId = 'Elegí un servicio.'
+    if (serviceIds.length === 0) {
+      nextErrors.serviceIds = 'Elegí al menos un servicio.'
     }
 
     if (!date) {
@@ -559,15 +683,7 @@ function NewAppointmentModal({
     setSaving(true)
     setSubmitError(null)
     try {
-      let resolvedClientId = clientId
-      if (creatingNew) {
-        const client = await createClient({
-          name: newClient.name,
-          phone: newClient.phone,
-          email: newClient.email,
-        })
-        resolvedClientId = client.id
-      }
+      const resolvedClientId = clientId
 
       const slot = slots.find((s) => s.startTime === startTime)
       if (!slot) {
@@ -579,31 +695,40 @@ function NewAppointmentModal({
       if (isEditing) {
         await updateAppointment(appointment.id, {
           clientId: resolvedClientId,
-          serviceId,
+          serviceIds,
           date,
           startTime,
           endTime: slot.endTime,
+          discountId: applicableDiscount?.id || null,
+          discountTitle: applicableDiscount?.title || null,
+          discountPercent: applicableDiscount?.percent ?? null,
         })
         onEdited?.(date)
       } else {
         await createAppointment({
           clientId: resolvedClientId,
-          serviceId,
+          serviceIds,
           date,
           startTime,
           endTime: slot.endTime,
+          discountId: applicableDiscount?.id || null,
+          discountTitle: applicableDiscount?.title || null,
+          discountPercent: applicableDiscount?.percent ?? null,
         })
         onCreated?.(date)
       }
     } catch (err) {
       console.error(err)
-      setSubmitError(isEditing ? 'No se pudo actualizar la cita.' : 'No se pudo agendar la cita.')
+      setSubmitError(
+        isEditing ? 'No se pudo actualizar la cita.' : 'No se pudo agendar la cita.',
+      )
     } finally {
       setSaving(false)
     }
   }
 
   return (
+    <>
     <Overlay onClick={onClose}>
       <Dialog onClick={(e) => e.stopPropagation()}>
         <Header>
@@ -618,53 +743,7 @@ function NewAppointmentModal({
             <Field>
               <Label htmlFor="appt-client">Cliente</Label>
 
-              {creatingNew ? (
-                <>
-                  <Row>
-                    <Field>
-                      <Label htmlFor="appt-new-name">Nombre</Label>
-                      <Input
-                        id="appt-new-name"
-                        name="name"
-                        value={newClient.name}
-                        onChange={handleNewClientChange}
-                        placeholder="Nombre de la cliente"
-                        $invalid={!!errors.name}
-                      />
-                      {errors.name && <ErrorText>{errors.name}</ErrorText>}
-                    </Field>
-
-                    <Field>
-                      <Label htmlFor="appt-new-phone">Teléfono</Label>
-                      <Input
-                        id="appt-new-phone"
-                        name="phone"
-                        value={newClient.phone}
-                        onChange={handleNewClientChange}
-                        placeholder="Ej. 300 123 4567"
-                        inputMode="tel"
-                        $invalid={!!errors.phone}
-                      />
-                      {errors.phone && <ErrorText>{errors.phone}</ErrorText>}
-                    </Field>
-
-                    <Field>
-                      <Label htmlFor="appt-new-email">Email (opcional)</Label>
-                      <Input
-                        id="appt-new-email"
-                        name="email"
-                        type="email"
-                        value={newClient.email}
-                        onChange={handleNewClientChange}
-                        placeholder="correo@ejemplo.com"
-                      />
-                    </Field>
-                  </Row>
-                  <BackButton type="button" onClick={cancelNewClient}>
-                    Buscar cliente existente
-                  </BackButton>
-                </>
-              ) : selectedClient ? (
+              {selectedClient ? (
                 <SelectedClient>
                   <SelectedInfo>
                     <FaUser size={14} />
@@ -726,23 +805,51 @@ function NewAppointmentModal({
             </Field>
 
             <Field>
-              <Label htmlFor="appt-service">Servicio</Label>
-              <Select
-                id="appt-service"
-                value={serviceId}
-                onChange={handleServiceChange}
-                $invalid={!!errors.serviceId}
-              >
-                <option value="">Seleccionar servicio</option>
-                {activeServices.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-              {errors.serviceId && <ErrorText>{errors.serviceId}</ErrorText>}
-              {activeServices.length === 0 && (
-                <ErrorText>No hay servicios activos. Creá uno en la sección Servicios.</ErrorText>
+              <Label>Servicios</Label>
+              {activeServices.length === 0 ? (
+                <ErrorText>
+                  No hay servicios activos. Creá uno en la sección Servicios.
+                </ErrorText>
+              ) : (
+                <>
+                  <ServiceGrid>
+                    {activeServices.map((s) => {
+                      const checked = serviceIds.includes(s.id)
+                      return (
+                        <ServiceChip
+                          key={s.id}
+                          id={`appt-service-${s.id}`}
+                          type="button"
+                          $active={checked}
+                          aria-pressed={checked}
+                          onClick={() => toggleService(s.id)}
+                        >
+                          <ServiceChipName>
+                            {checked && <FaCheck size={11} />}
+                            <span>{s.name}</span>
+                          </ServiceChipName>
+                          {(s.duration || s.price) && (
+                            <ServiceChipMeta>
+                              {s.duration ? formatDuration(s.duration) : ''}
+                              {s.duration && s.price ? ' · ' : ''}
+                              {s.price ? formatPrice(s.price) : ''}
+                            </ServiceChipMeta>
+                          )}
+                        </ServiceChip>
+                      )
+                    })}
+                  </ServiceGrid>
+                  {errors.serviceIds && (
+                    <ErrorText>{errors.serviceIds}</ErrorText>
+                  )}
+                  {selectedServices.length > 0 && (
+                    <Hint>
+                      {selectedServices.length}{' '}
+                      {selectedServices.length === 1 ? 'servicio' : 'servicios'}
+                      {totalDuration ? ` · ${formatDuration(totalDuration)}` : ''}
+                    </Hint>
+                  )}
+                </>
               )}
             </Field>
 
@@ -768,7 +875,7 @@ function NewAppointmentModal({
                   <Spinner />
                   Cargando horarios...
                 </SlotLoading>
-              ) : service && slots.length > 0 ? (
+              ) : selectedServices.length > 0 && slots.length > 0 ? (
                 <SlotGrid>
                   {slots.map((slot) => (
                     <SlotButton
@@ -783,15 +890,65 @@ function NewAppointmentModal({
                 </SlotGrid>
               ) : (
                 <SlotLoading>
-                  {service
+                  {selectedServices.length > 0
                     ? 'No hay horarios disponibles para este día.'
                     : startTime
                       ? `Horario seleccionado: ${formatTime12h(startTime)}`
-                      : 'Seleccioná un servicio para ver los horarios.'}
+                      : 'Seleccioná al menos un servicio para ver los horarios.'}
                 </SlotLoading>
               )}
               {errors.startTime && <ErrorText>{errors.startTime}</ErrorText>}
             </Field>
+
+            {applicableDiscounts.length > 1 && selectedServices.length > 0 && (
+              <DiscountPicker>
+                <DiscountPickerTitle>Elegí el descuento a aplicar</DiscountPickerTitle>
+                <DiscountOptions>
+                  {applicableDiscounts.map((discount) => (
+                    <DiscountOption
+                      key={discount.id}
+                      type="button"
+                      $selected={applicableDiscount?.id === discount.id}
+                      onClick={() => setSelectedDiscountId(discount.id)}
+                    >
+                      <span>{discount.title}</span>
+                      <DiscountOptionPercent>
+                        {discount.percent}% OFF
+                      </DiscountOptionPercent>
+                    </DiscountOption>
+                  ))}
+                </DiscountOptions>
+              </DiscountPicker>
+            )}
+
+            {selectedServices.length > 0 && subtotal > 0 && (
+              <Summary>
+                <SummaryRow>
+                  <span>Subtotal</span>
+                  <span>{formatPrice(subtotal)}</span>
+                </SummaryRow>
+                {applicableDiscount ? (
+                  <DiscountRow>
+                    <span>
+                      Descuento {applicableDiscount.title} ({applicableDiscount.percent}%)
+                    </span>
+                    <span>-{formatPrice(discountAmount)}</span>
+                  </DiscountRow>
+                ) : null}
+                {pointsToEarn > 0 && (
+                  <SummaryRow>
+                    <span>Puntos al asistir</span>
+                    <span>
+                      {pointsToEarn} pt{pointsToEarn === 1 ? '' : 's'}
+                    </span>
+                  </SummaryRow>
+                )}
+                <TotalRowStyled>
+                  <span>Total</span>
+                  <span>{formatPrice(total)}</span>
+                </TotalRowStyled>
+              </Summary>
+            )}
 
             {submitError && (
               <Field>
@@ -833,6 +990,14 @@ function NewAppointmentModal({
         </Actions>
       </Dialog>
     </Overlay>
+
+    {showNewClient && (
+      <NewClientModal
+        onCreated={handleClientCreated}
+        onClose={() => setShowNewClient(false)}
+      />
+    )}
+    </>
   )
 }
 

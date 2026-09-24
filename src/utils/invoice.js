@@ -26,21 +26,57 @@ function drawRoundedRect(doc, x, y, w, h, r) {
   doc.roundedRect(x, y, w, h, r, r, 'F')
 }
 
-function buildInvoiceDoc({ client, items }) {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const W = doc.internal.pageSize.getWidth()
-  const margin = 16
-
+export function buildInvoiceData({ client, items, discount }) {
   const list = items?.length ? items : []
   const firstAppt = list[0]?.appointment
   const code = getTicketCode(firstAppt) || '—'
   const clientName = client?.name || 'Cliente'
   const contact = [client?.phone, client?.email].filter(Boolean).join(' · ')
   const date = firstAppt?.date ? formatDateLong(firstAppt.date) : '—'
-  const total = list.reduce(
+  const subtotal = list.reduce(
     (sum, item) => sum + (Number(item.service?.price) || 0),
     0,
   )
+  const discountPercent = discount?.percent ?? null
+  const discountAmount =
+    discountPercent != null ? Math.round((subtotal * discountPercent) / 100) : 0
+  const total = subtotal - discountAmount
+  const services = list.map((item) => ({
+    name: item.service?.name || 'Servicio',
+    price: item.service?.price,
+    time: item.appointment?.startTime
+      ? `${formatTime12h(item.appointment.startTime)} - ${formatTime12h(item.appointment.endTime)}`
+      : null,
+    duration: item.service?.duration
+      ? formatDuration(item.service.duration)
+      : null,
+  }))
+
+  return {
+    code,
+    clientName,
+    contact,
+    date,
+    subtotal,
+    discountAmount,
+    discountTitle: discount?.title || null,
+    discountPercent,
+    total,
+    services,
+  }
+}
+
+function buildInvoiceDoc({ client, items, discount }) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const W = doc.internal.pageSize.getWidth()
+  const margin = 16
+
+  const { code, clientName, contact, date, discountAmount, discountTitle, discountPercent, total, services } =
+    buildInvoiceData({
+      client,
+      items,
+      discount,
+    })
 
   doc.setTextColor(...COLORS.rose)
   doc.setFont('helvetica', 'bold')
@@ -101,24 +137,17 @@ function buildInvoiceDoc({ client, items }) {
 
   doc.setLineWidth(0.3)
 
-  list.forEach((item) => {
-    const serviceName = item.service?.name || 'Servicio'
-    const time = item.appointment?.startTime
-      ? `${formatTime12h(item.appointment.startTime)} - ${formatTime12h(item.appointment.endTime)}`
-      : null
-    const duration = item.service?.duration
-      ? formatDuration(item.service.duration)
-      : null
-    const meta = [date, time, duration].filter(Boolean).join('  ·  ')
+  services.forEach((service) => {
+    const meta = [date, service.time, service.duration].filter(Boolean).join('  ·  ')
 
     doc.setTextColor(...COLORS.ink)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(11)
-    doc.text(serviceName, margin + 5, y + 7)
+    doc.text(service.name, margin + 5, y + 7)
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(11)
-    doc.text(money(item.service?.price), W - margin - 5, y + 7, {
+    doc.text(money(service.price), W - margin - 5, y + 7, {
       align: 'right',
     })
 
@@ -136,6 +165,19 @@ function buildInvoiceDoc({ client, items }) {
   })
 
   y += 11
+
+  if (discountAmount > 0) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(...COLORS.roseDeep)
+    doc.text(
+      `Descuento (${discountTitle || discountPercent + '%'})`,
+      margin,
+      y,
+    )
+    doc.text(`-${money(discountAmount)}`, W - margin, y, { align: 'right' })
+    y += 8
+  }
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(13)
@@ -156,10 +198,10 @@ function buildInvoiceDoc({ client, items }) {
   return doc
 }
 
-export function generateInvoice({ client, items }) {
-  const doc = buildInvoiceDoc({ client, items })
-  const code = getTicketCode(items?.[0]?.appointment) || '—'
-  const filename = `factura-benis-${code}.pdf`
+export function generateInvoice({ client, items, discount }) {
+  const data = buildInvoiceData({ client, items, discount })
+  const doc = buildInvoiceDoc({ client, items, discount })
+  const filename = `factura-benis-${data.code}.pdf`
   const blob = doc.output('blob')
-  return { blob, code, filename }
+  return { blob, code: data.code, filename, data }
 }

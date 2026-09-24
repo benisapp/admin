@@ -37,19 +37,27 @@ export async function fetchClients() {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
 }
 
-export async function createClient({ name, phone, email }) {
+export async function createClient({ name, phone, email, birthday }) {
   const normalized = normalizePhone(phone)
 
   const existing = await getClientByPhone(normalized)
-  if (existing) return existing
+  if (existing) {
+    const error = new Error('phone-exists')
+    error.code = 'phone-exists'
+    error.clientName = existing.name
+    throw error
+  }
 
   const now = new Date().toISOString()
   const emailValue = email ? email.trim() : null
+  const birthdayValue = birthday || null
 
   const ref = await addDoc(collection(db, CLIENTS_COLLECTION), {
     name: name.trim(),
     phone: normalized,
     email: emailValue,
+    birthday: birthdayValue,
+    points: 0,
     active: true,
     createdAt: now,
     updatedAt: now,
@@ -60,6 +68,8 @@ export async function createClient({ name, phone, email }) {
     name: name.trim(),
     phone: normalized,
     email: emailValue,
+    birthday: birthdayValue,
+    points: 0,
     active: true,
     createdAt: now,
     updatedAt: now,

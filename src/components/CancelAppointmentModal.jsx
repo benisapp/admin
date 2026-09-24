@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import { FaClock, FaTriangleExclamation, FaUser, FaXmark } from 'react-icons/fa6'
+import { formatServiceNames } from '../utils/appointmentServices'
 import { formatDateLong, formatTime12h } from '../utils/dates'
 import { Alert, DangerButton, SecondaryButton, Spinner } from './ui'
 
@@ -108,7 +109,7 @@ const Actions = styled.div`
   border-top: 1px solid var(--color-border);
 `
 
-function CancelAppointmentModal({ appointment, client, service, onConfirm, onClose }) {
+function CancelAppointmentModal({ appointment, client, services, onConfirm, onClose }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -158,7 +159,7 @@ function CancelAppointmentModal({ appointment, client, service, onConfirm, onClo
             <SummaryName>{client ? client.name : 'Cliente'}</SummaryName>
             <SummaryLine>
               <FaUser size={12} />
-              {service ? service.name : 'Servicio'}
+              {formatServiceNames(services)}
             </SummaryLine>
             <SummaryLine>
               <FaClock size={12} />

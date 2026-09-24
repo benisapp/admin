@@ -14,8 +14,11 @@ import {
 import { STATUS_OPTIONS } from '../appointmentStatus'
 import { fetchClients } from '../clients'
 import { fetchServices } from '../services'
+import { syncAppointmentPoints } from '../points'
 import { getSchedule } from '../settings'
+import { apptServiceNames, getAppointmentServices } from '../utils/appointmentServices'
 import AppointmentStatusModal from './AppointmentStatusModal'
+import CancelAppointmentModal from './CancelAppointmentModal'
 import {
   addDays,
   formatDateString,
@@ -274,6 +277,16 @@ const ApptService = styled.span`
   white-space: nowrap;
 `
 
+const ApptDiscount = styled.span`
+  align-self: flex-start;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-full);
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: var(--color-success-soft);
+  color: var(--color-success);
+`
+
 const WeekFree = styled.div`
   display: flex;
   flex-direction: column;
@@ -319,6 +332,7 @@ function WeekCalendar() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [statusAppt, setStatusAppt] = useState(null)
+  const [cancelAppt, setCancelAppt] = useState(null)
   const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
@@ -393,9 +407,30 @@ function WeekCalendar() {
   const goToThisWeek = () => setWeekStart(startOfWeek(new Date()))
 
   const handleStatusChange = async (appt, status) => {
+    const pointsAwarded = await syncAppointmentPoints({
+      appointment: appt,
+      services,
+      newStatus: status,
+    })
     await updateAppointmentStatus(appt.id, status)
     setAppointments((prev) =>
-      prev.map((a) => (a.id === appt.id ? { ...a, status } : a)),
+      prev.map((a) => (a.id === appt.id ? { ...a, status, pointsAwarded } : a)),
+    )
+  }
+
+  const handleCancelAppointment = async (appt) => {
+    const pointsAwarded = await syncAppointmentPoints({
+      appointment: appt,
+      services,
+      newStatus: APPOINTMENT_STATUS.CANCELLED,
+    })
+    await updateAppointmentStatus(appt.id, APPOINTMENT_STATUS.CANCELLED)
+    setAppointments((prev) =>
+      prev.map((a) =>
+        a.id === appt.id
+          ? { ...a, status: APPOINTMENT_STATUS.CANCELLED, pointsAwarded }
+          : a,
+      ),
     )
   }
 
@@ -488,8 +523,13 @@ function WeekCalendar() {
                         </ApptTimeRow>
                         <ApptName>{client ? client.name : 'Cliente'}</ApptName>
                         <ApptService>
-                          {serviceMap[appt.serviceId]?.name || 'Servicio'}
+                          {apptServiceNames(appt, serviceMap)}
                         </ApptService>
+                        {appt.discountTitle && appt.discountPercent != null && (
+                          <ApptDiscount title={appt.discountTitle}>
+                            -{appt.discountPercent}%
+                          </ApptDiscount>
+                        )}
                       </WeekAppt>
                     )
                   })
@@ -538,9 +578,22 @@ function WeekCalendar() {
         <AppointmentStatusModal
           appointment={statusAppt}
           client={clientMap[statusAppt.clientId]}
-          service={serviceMap[statusAppt.serviceId]}
+          services={getAppointmentServices(statusAppt, serviceMap)}
           onSave={(status) => handleStatusChange(statusAppt, status)}
+          onCancel={() => {
+            setCancelAppt(statusAppt)
+            setStatusAppt(null)
+          }}
           onClose={() => setStatusAppt(null)}
+        />
+      )}
+      {cancelAppt && (
+        <CancelAppointmentModal
+          appointment={cancelAppt}
+          client={clientMap[cancelAppt.clientId]}
+          services={getAppointmentServices(cancelAppt, serviceMap)}
+          onConfirm={() => handleCancelAppointment(cancelAppt)}
+          onClose={() => setCancelAppt(null)}
         />
       )}
     </>

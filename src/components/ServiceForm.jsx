@@ -31,10 +31,10 @@ const Actions = styled.div`
 
 const Row = styled.div`
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
 
-  @media (max-width: 480px) {
+  @media (max-width: 620px) {
     grid-template-columns: 1fr;
   }
 `
@@ -104,7 +104,14 @@ const IconOption = styled.button`
   }
 `
 
-const emptyValues = { name: '', description: '', duration: '', price: '', icon: '' }
+const emptyValues = {
+  name: '',
+  description: '',
+  duration: '',
+  price: '',
+  points: '',
+  icon: '',
+}
 
 function ServiceForm({
   initialValues = emptyValues,
@@ -118,6 +125,7 @@ function ServiceForm({
     description: initialValues.description ?? '',
     duration: initialValues.duration ?? '',
     price: initialValues.price ?? '',
+    points: initialValues.points ?? '',
     icon: initialValues.icon ?? '',
   })
   const [errors, setErrors] = useState({})
@@ -149,6 +157,14 @@ function ServiceForm({
       nextErrors.price = 'El valor debe ser un número mayor o igual que 0.'
     }
 
+    const points = Number(values.points)
+    if (
+      values.points !== '' &&
+      (Number.isNaN(points) || points < 0 || !Number.isInteger(points))
+    ) {
+      nextErrors.points = 'Los puntos deben ser un entero mayor o igual que 0.'
+    }
+
     if (!values.icon) {
       nextErrors.icon = 'El icono es obligatorio.'
     }
@@ -166,6 +182,7 @@ function ServiceForm({
       description: values.description.trim(),
       duration: Number(values.duration),
       price: Number(values.price),
+      points: values.points === '' ? 0 : Number(values.points),
       icon: values.icon,
     })
   }
@@ -265,6 +282,22 @@ function ServiceForm({
             $invalid={!!errors.price}
           />
           {errors.price && <ErrorText>{errors.price}</ErrorText>}
+        </Field>
+
+        <Field>
+          <Label htmlFor="service-points">Puntos</Label>
+          <Input
+            id="service-points"
+            name="points"
+            type="number"
+            min="0"
+            step="1"
+            value={values.points}
+            onChange={handleChange}
+            placeholder="Ej. 10"
+            $invalid={!!errors.points}
+          />
+          {errors.points && <ErrorText>{errors.points}</ErrorText>}
         </Field>
       </Row>
 

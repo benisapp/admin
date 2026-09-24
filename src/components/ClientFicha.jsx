@@ -7,11 +7,13 @@ import {
   FaEnvelope,
   FaPhone,
   FaPlus,
+  FaStar,
   FaTriangleExclamation,
   FaUser,
 } from 'react-icons/fa6'
 import { APPOINTMENT_STATUS, getAppointmentsByClient } from '../appointments'
 import { STATUS_OPTIONS } from '../appointmentStatus'
+import { apptServiceNames } from '../utils/appointmentServices'
 import { formatDateLong, formatTime12h, isSlotInPast } from '../utils/dates'
 import { Alert, Button, EmptyState, Spinner } from './ui'
 
@@ -80,6 +82,19 @@ const ContactLine = styled.p`
   font-size: 0.85rem;
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
+`
+
+const PointsBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--color-warning-soft, var(--color-info-soft));
+  color: var(--color-warning, var(--color-info));
 `
 
 const ActionsBar = styled.div`
@@ -326,7 +341,7 @@ function ClientFicha({
               {formatTime12h(nextAppt.endTime)}
             </NextLine>
             <NextService>
-              {serviceMap[nextAppt.serviceId]?.name || 'Servicio'}
+              {apptServiceNames(nextAppt, serviceMap)}
             </NextService>
             <StatusLabel status={nextAppt.status} />
           </NextCard>
@@ -352,7 +367,7 @@ function ClientFicha({
                 <HistoryDate>{formatDateLong(appt.date)}</HistoryDate>
                 <HistoryInfo>
                   <HistoryService>
-                    {serviceMap[appt.serviceId]?.name || 'Servicio'}
+                    {apptServiceNames(appt, serviceMap)}
                   </HistoryService>
                   <HistoryTime>
                     <FaClock size={11} />
@@ -394,6 +409,11 @@ function ClientFicha({
               {client.email}
             </ContactLine>
           )}
+          <PointsBadge>
+            <FaStar size={12} />
+            {Number(client.points) || 0} punto
+            {(Number(client.points) || 0) === 1 ? '' : 's'}
+          </PointsBadge>
         </div>
       </ClientHeader>
 

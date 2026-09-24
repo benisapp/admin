@@ -60,32 +60,41 @@ export async function updateAppointmentStatus(id, status) {
 
 export async function updateAppointment(
   id,
-  { clientId, serviceId, date, startTime, endTime },
+  { clientId, serviceIds, date, startTime, endTime, discountId, discountTitle, discountPercent },
 ) {
   await updateDoc(doc(db, APPOINTMENTS_COLLECTION, id), {
     clientId,
-    serviceId,
+    serviceIds,
     date,
     startTime,
     endTime,
+    discountId: discountId || null,
+    discountTitle: discountTitle || null,
+    discountPercent: discountPercent ?? null,
     updatedAt: new Date().toISOString(),
   })
 }
 
 export async function createAppointment({
   clientId,
-  serviceId,
+  serviceIds,
   date,
   startTime,
   endTime,
+  discountId,
+  discountTitle,
+  discountPercent,
 }) {
   const now = new Date().toISOString()
   const ref = await addDoc(collection(db, APPOINTMENTS_COLLECTION), {
     clientId,
-    serviceId,
+    serviceIds,
     date,
     startTime,
     endTime,
+    discountId: discountId || null,
+    discountTitle: discountTitle || null,
+    discountPercent: discountPercent ?? null,
     status: APPOINTMENT_STATUS.CONFIRMED,
     createdAt: now,
     updatedAt: now,
@@ -94,10 +103,13 @@ export async function createAppointment({
   return {
     id: ref.id,
     clientId,
-    serviceId,
+    serviceIds,
     date,
     startTime,
     endTime,
+    discountId: discountId || null,
+    discountTitle: discountTitle || null,
+    discountPercent: discountPercent ?? null,
     status: APPOINTMENT_STATUS.CONFIRMED,
     createdAt: now,
     updatedAt: now,

@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
-import { FaCircleCheck, FaPlus, FaTriangleExclamation } from 'react-icons/fa6'
+import { FaCircleCheck, FaPlus, FaTag, FaTriangleExclamation } from 'react-icons/fa6'
 import ConfirmModal from '../components/ConfirmModal'
-import ServiceForm from '../components/ServiceForm'
-import ServiceList from '../components/ServiceList'
-import ServiceRangeModal from '../components/ServiceRangeModal'
+import DiscountForm from '../components/DiscountForm'
+import DiscountList from '../components/DiscountList'
 import { Alert, Button, Spinner } from '../components/ui'
 import {
-  createService,
-  fetchServices,
-  setServiceActive,
-  setServiceActiveRange,
-  updateService,
-} from '../services'
+  createDiscount,
+  ensureBirthdayDiscount,
+  fetchDiscounts,
+  setDiscountActive,
+  updateDiscount,
+} from '../discounts'
+import { fetchServices } from '../services'
 
 const Wrapper = styled.div`
   flex: 1;
@@ -51,6 +51,7 @@ const Subtitle = styled.p`
 
 const Notice = styled.div`
   margin-bottom: 1rem;
+  margin-top: 0.5rem;
 `
 
 const Loading = styled.div`
@@ -71,7 +72,8 @@ const ErrorWrap = styled.div`
   text-align: center;
 `
 
-function Servicios() {
+function Descuentos() {
+  const [discounts, setDiscounts] = useState([])
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -79,7 +81,6 @@ function Servicios() {
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [rangeService, setRangeService] = useState(null)
   const [deactivating, setDeactivating] = useState(null)
   const [deactivatingLoading, setDeactivatingLoading] = useState(false)
 
@@ -97,11 +98,18 @@ function Servicios() {
     }
   }, [])
 
-  const loadServices = async () => {
+  const loadDiscounts = async () => {
     setLoading(true)
     setLoadError(false)
     try {
-      setServices(await fetchServices())
+      // El descuento de cumpleaños es del sistema: se asegura que exista.
+      await ensureBirthdayDiscount()
+      const [discountsData, servicesData] = await Promise.all([
+        fetchDiscounts(),
+        fetchServices(),
+      ])
+      setDiscounts(discountsData)
+      setServices(servicesData)
     } catch (err) {
       console.error(err)
       setLoadError(true)
@@ -112,19 +120,19 @@ function Servicios() {
 
   useEffect(() => {
     // eslint-disable-next-line react/set-state-in-effect
-    loadServices()
+    loadDiscounts()
   }, [])
 
   const handleCreate = async (data) => {
     setSaving(true)
     try {
-      await createService(data)
+      await createDiscount(data)
       setShowForm(false)
-      await loadServices()
-      showNotice('success', 'Servicio creado correctamente.')
+      await loadDiscounts()
+      showNotice('success', 'Descuento creado correctamente.')
     } catch (err) {
       console.error(err)
-      showNotice('error', 'No se pudo crear el servicio.')
+      showNotice('error', 'No se pudo crear el descuento.')
     } finally {
       setSaving(false)
     }
@@ -133,48 +141,48 @@ function Servicios() {
   const handleEdit = async (data) => {
     setSaving(true)
     try {
-      await updateService(editing.id, data)
+      await updateDiscount(editing.id, data)
       setEditing(null)
       setShowForm(false)
-      await loadServices()
-      showNotice('success', 'Servicio actualizado correctamente.')
+      await loadDiscounts()
+      showNotice('success', 'Descuento actualizado correctamente.')
     } catch (err) {
       console.error(err)
-      showNotice('error', 'No se pudo editar el servicio.')
+      showNotice('error', 'No se pudo editar el descuento.')
     } finally {
       setSaving(false)
     }
   }
 
-  const handleToggleActive = async (service) => {
-    if (service.active) {
-      setDeactivating(service)
+  const handleToggleActive = async (discount) => {
+    if (discount.active) {
+      setDeactivating(discount)
       return
     }
 
     try {
-      await setServiceActive(service.id, !service.active)
-      await loadServices()
-      showNotice('success', 'Servicio activado.')
+      await setDiscountActive(discount.id, true)
+      await loadDiscounts()
+      showNotice('success', 'Descuento activado.')
     } catch (err) {
       console.error(err)
-      showNotice('error', 'No se pudo actualizar el servicio.')
+      showNotice('error', 'No se pudo actualizar el descuento.')
     }
   }
 
   const handleConfirmDeactivate = async () => {
-    const service = deactivating
+    const discount = deactivating
     setDeactivatingLoading(true)
     try {
-      await setServiceActive(service.id, false)
-      await loadServices()
+      await setDiscountActive(discount.id, false)
+      await loadDiscounts()
       setDeactivating(null)
       setDeactivatingLoading(false)
-      showNotice('success', 'Servicio desactivado.')
+      showNotice('success', 'Descuento desactivado.')
     } catch (err) {
       console.error(err)
       setDeactivatingLoading(false)
-      showNotice('error', 'No se pudo actualizar el servicio.')
+      showNotice('error', 'No se pudo actualizar el descuento.')
     }
   }
 
@@ -183,15 +191,9 @@ function Servicios() {
     setShowForm(true)
   }
 
-  const openEdit = (service) => {
-    setEditing(service)
+  const openEdit = (discount) => {
+    setEditing(discount)
     setShowForm(true)
-  }
-
-  const handleSaveRange = async ({ activeFrom, activeUntil }) => {
-    await setServiceActiveRange(rangeService.id, { activeFrom, activeUntil })
-    await loadServices()
-    showNotice('success', 'Rango de activación guardado.')
   }
 
   const closeForm = () => {
@@ -203,13 +205,13 @@ function Servicios() {
     <Wrapper>
       <PageHeader>
         <div>
-          <Title>Servicios</Title>
-          <Subtitle>Administrá los servicios de tu barbería y salón.</Subtitle>
+          <Title>Descuentos</Title>
+          <Subtitle>Administrá los descuentos porcentuales de tu barbería.</Subtitle>
         </div>
         {!showForm && (
           <Button type="button" onClick={openCreate}>
             <FaPlus size={14} />
-            Nuevo servicio
+            Nuevo descuento
           </Button>
         )}
       </PageHeader>
@@ -232,9 +234,10 @@ function Servicios() {
       )}
 
       {showForm && (
-        <ServiceForm
+        <DiscountForm
           initialValues={editing ?? {}}
-          submitLabel={editing ? 'Guardar cambios' : 'Crear servicio'}
+          services={services}
+          submitLabel={editing ? 'Guardar cambios' : 'Crear descuento'}
           submitting={saving}
           onSubmit={editing ? handleEdit : handleCreate}
           onCancel={closeForm}
@@ -244,39 +247,31 @@ function Servicios() {
       {loading ? (
         <Loading>
           <Spinner />
-          Cargando servicios...
+          Cargando descuentos...
         </Loading>
       ) : loadError ? (
         <ErrorWrap>
           <Alert tone="error" icon={<FaTriangleExclamation size={16} />}>
-            No se pudieron cargar los servicios.
+            No se pudieron cargar los descuentos.
           </Alert>
-          <Button type="button" onClick={loadServices}>
+          <Button type="button" onClick={loadDiscounts}>
             Reintentar
           </Button>
         </ErrorWrap>
       ) : (
-        <ServiceList
+        <DiscountList
+          discounts={discounts}
           services={services}
           onEdit={openEdit}
           onToggleActive={handleToggleActive}
-          onScheduleRange={setRangeService}
           onCreate={openCreate}
-        />
-      )}
-
-      {rangeService && (
-        <ServiceRangeModal
-          service={rangeService}
-          onSave={handleSaveRange}
-          onClose={() => setRangeService(null)}
         />
       )}
 
       {deactivating && (
         <ConfirmModal
-          title="Desactivar servicio"
-          message={`¿Desactivar el servicio "${deactivating.name}"?`}
+          title="Desactivar descuento"
+          message={`¿Desactivar el descuento "${deactivating.title}"?`}
           confirmLabel="Desactivar"
           loading={deactivatingLoading}
           onConfirm={handleConfirmDeactivate}
@@ -287,4 +282,4 @@ function Servicios() {
   )
 }
 
-export default Servicios
+export default Descuentos
