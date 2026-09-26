@@ -33,24 +33,49 @@ export function buildInvoiceData({ client, items, discount }) {
   const clientName = client?.name || 'Cliente'
   const contact = [client?.phone, client?.email].filter(Boolean).join(' · ')
   const date = firstAppt?.date ? formatDateLong(firstAppt.date) : '—'
-  const subtotal = list.reduce(
+  const addons = Array.isArray(firstAppt?.addons)
+    ? firstAppt.addons.filter(Boolean)
+    : []
+  const servicesSubtotal = list.reduce(
     (sum, item) => sum + (Number(item.service?.price) || 0),
     0,
   )
+  const addonsSubtotal = addons.reduce((sum, addon) => {
+    const quantity = Number(addon.quantity)
+    const qty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1
+    return sum + (Number(addon.price) || 0) * qty
+  }, 0)
+  const subtotal = servicesSubtotal + addonsSubtotal
   const discountPercent = discount?.percent ?? null
   const discountAmount =
     discountPercent != null ? Math.round((subtotal * discountPercent) / 100) : 0
   const total = subtotal - discountAmount
-  const services = list.map((item) => ({
-    name: item.service?.name || 'Servicio',
-    price: item.service?.price,
-    time: item.appointment?.startTime
-      ? `${formatTime12h(item.appointment.startTime)} - ${formatTime12h(item.appointment.endTime)}`
-      : null,
-    duration: item.service?.duration
-      ? formatDuration(item.service.duration)
-      : null,
-  }))
+  const services = [
+    ...list.map((item) => ({
+      name: item.service?.name || 'Servicio',
+      price: item.service?.price,
+      time: item.appointment?.startTime
+        ? `${formatTime12h(item.appointment.startTime)} - ${formatTime12h(item.appointment.endTime)}`
+        : null,
+      duration: item.service?.duration
+        ? formatDuration(item.service.duration)
+        : null,
+    })),
+    ...addons.map((addon) => {
+      const quantity = Number(addon.quantity)
+      const qty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1
+      return {
+        name: `Adicional · ${addon.name || 'Adicional'}${qty > 1 ? ` ×${qty}` : ''}`,
+        price: (Number(addon.price) || 0) * qty,
+        time: null,
+        duration:
+          Number(addon.duration) > 0
+            ? formatDuration(Number(addon.duration) * qty)
+            : null,
+        isAddon: true,
+      }
+    }),
+  ]
 
   return {
     code,

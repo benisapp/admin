@@ -33,9 +33,11 @@ import { getSchedule } from '../settings'
 import { formatDuration, formatPrice } from '../utils/format'
 import {
   apptTotalDuration,
+  getAppointmentAddons,
   getAppointmentServices,
 } from '../utils/appointmentServices'
 import { generateInvoice } from '../utils/invoice'
+import BarberIcon from './BarberIcon'
 import InvoiceModal from './InvoiceModal'
 import NewAppointmentModal from './NewAppointmentModal'
 import {
@@ -374,6 +376,42 @@ const ServiceDuration = styled.span`
   color: var(--color-text-subtle);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+`
+
+const AddonName = styled.span`
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const AddonTag = styled.span`
+  flex-shrink: 0;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-full);
+  border: 1px dashed var(--color-border-strong);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+`
+
+const AddonQtyTag = styled.span`
+  flex-shrink: 0;
+  padding: 0.05rem 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 0.62rem;
+  font-weight: 800;
 `
 
 const TotalRow = styled.div`
@@ -964,6 +1002,12 @@ function DayCalendar({ onOpenClient }) {
     return Array.from({ length: 42 }, (_, i) => addDays(start, i))
   }, [viewMonth])
 
+  const todayStart = useMemo(() => {
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    return now
+  }, [])
+
   const monthLabel = (() => {
     const text = new Intl.DateTimeFormat('es-CO', {
       month: 'long',
@@ -1062,6 +1106,7 @@ function DayCalendar({ onOpenClient }) {
     const statusMeta = STATUS_META[appt.status]
     const StatusIcon = statusMeta?.Icon
     const apptServices = getAppointmentServices(appt, serviceMap)
+    const apptAddons = getAppointmentAddons(appt)
     const totalDuration = apptTotalDuration(appt, serviceMap)
     const cancelled = appt.status === APPOINTMENT_STATUS.CANCELLED
 
@@ -1190,6 +1235,25 @@ function DayCalendar({ onOpenClient }) {
                 <ServiceName>Servicio</ServiceName>
               </ServiceRow>
             )}
+            {apptAddons.map((addon) => {
+              const quantity = Number(addon.quantity)
+              const qty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1
+              return (
+                <ServiceRow key={addon.id}>
+                  <AddonName>
+                    {addon.icon && <BarberIcon id={addon.icon} size={12} />}
+                    {addon.name}
+                    {qty > 1 && <AddonQtyTag>×{qty}</AddonQtyTag>}
+                  </AddonName>
+                  <AddonTag>Adicional</AddonTag>
+                  {Number(addon.duration) > 0 ? (
+                    <ServiceDuration>
+                      +{formatDuration(Number(addon.duration) * qty)}
+                    </ServiceDuration>
+                  ) : null}
+                </ServiceRow>
+              )
+            })}
             {totalDuration ? (
               <TotalRow>
                 <TotalLabel>Total</TotalLabel>
@@ -1364,7 +1428,8 @@ function DayCalendar({ onOpenClient }) {
                         const inMonth = day.getMonth() === viewMonth.getMonth()
                         const selected = isSameDay(day, selectedDate)
                         const today = isSameDay(day, new Date())
-                        const disabled = !inMonth || isSunday(day)
+                        const isPast = day < todayStart
+                        const disabled = !inMonth || isSunday(day) || isPast
                         return (
                           <DayCell
                             key={day.getTime()}
@@ -1426,6 +1491,7 @@ function DayCalendar({ onOpenClient }) {
           appointment={statusAppt}
           client={clientMap[statusAppt.clientId]}
           services={getAppointmentServices(statusAppt, serviceMap)}
+          addons={getAppointmentAddons(statusAppt)}
           onSave={(status) => handleStatusChange(statusAppt, status)}
           onCancel={() => {
             setCancelAppt(statusAppt)
@@ -1450,6 +1516,7 @@ function DayCalendar({ onOpenClient }) {
           appointment={cancelAppt}
           client={clientMap[cancelAppt.clientId]}
           services={getAppointmentServices(cancelAppt, serviceMap)}
+          addons={getAppointmentAddons(cancelAppt)}
           onConfirm={() => handleCancelAppointment(cancelAppt)}
           onClose={() => setCancelAppt(null)}
         />

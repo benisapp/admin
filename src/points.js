@@ -13,10 +13,18 @@ export function getServicePoints(service) {
 export function getAppointmentPoints(appointment, services) {
   const ids = Array.isArray(appointment?.serviceIds) ? appointment.serviceIds : []
   const list = Array.isArray(services) ? services : []
-  return ids.reduce((sum, id) => {
+  const servicesTotal = ids.reduce((sum, id) => {
     const service = list.find((s) => s.id === id)
     return sum + getServicePoints(service)
   }, 0)
+  const addons = Array.isArray(appointment?.addons) ? appointment.addons : []
+  const addonsTotal = addons.reduce((sum, addon) => {
+    const value = Number(addon?.points)
+    const quantity = Number(addon?.quantity)
+    const qty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1
+    return sum + (Number.isFinite(value) && value > 0 ? value * qty : 0)
+  }, 0)
+  return servicesTotal + addonsTotal
 }
 
 // Acredita (o revierte) los puntos del cliente según el estado de la cita.

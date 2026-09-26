@@ -16,7 +16,7 @@ import { fetchClients } from '../clients'
 import { fetchServices } from '../services'
 import { syncAppointmentPoints } from '../points'
 import { getSchedule } from '../settings'
-import { apptServiceNames, getAppointmentServices } from '../utils/appointmentServices'
+import { apptFullNames, getAppointmentAddons, getAppointmentServices } from '../utils/appointmentServices'
 import AppointmentStatusModal from './AppointmentStatusModal'
 import CancelAppointmentModal from './CancelAppointmentModal'
 import {
@@ -523,7 +523,7 @@ function WeekCalendar() {
                         </ApptTimeRow>
                         <ApptName>{client ? client.name : 'Cliente'}</ApptName>
                         <ApptService>
-                          {apptServiceNames(appt, serviceMap)}
+                          {apptFullNames(appt, serviceMap)}
                         </ApptService>
                         {appt.discountTitle && appt.discountPercent != null && (
                           <ApptDiscount title={appt.discountTitle}>
@@ -579,6 +579,7 @@ function WeekCalendar() {
           appointment={statusAppt}
           client={clientMap[statusAppt.clientId]}
           services={getAppointmentServices(statusAppt, serviceMap)}
+          addons={getAppointmentAddons(statusAppt)}
           onSave={(status) => handleStatusChange(statusAppt, status)}
           onCancel={() => {
             setCancelAppt(statusAppt)
@@ -592,6 +593,7 @@ function WeekCalendar() {
           appointment={cancelAppt}
           client={clientMap[cancelAppt.clientId]}
           services={getAppointmentServices(cancelAppt, serviceMap)}
+          addons={getAppointmentAddons(cancelAppt)}
           onConfirm={() => handleCancelAppointment(cancelAppt)}
           onClose={() => setCancelAppt(null)}
         />

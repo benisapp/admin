@@ -2,6 +2,7 @@ import styled from 'styled-components'
 import {
   FaCalendarDays,
   FaClock,
+  FaListCheck,
   FaPencil,
   FaPlus,
   FaPowerOff,
@@ -74,15 +75,6 @@ const Name = styled.p`
   color: var(--color-text);
 `
 
-const Description = styled.p`
-  margin: 0.125rem 0 0;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`
-
 const Meta = styled.div`
   display: flex;
   align-items: center;
@@ -138,6 +130,42 @@ const PointsChip = styled.span`
   color: var(--color-warning, var(--color-info));
 `
 
+const AddonsRow = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+`
+
+const AddonChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-full);
+  border: 1px dashed var(--color-border-strong);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+`
+
+const AddonChipPrice = styled.span`
+  font-weight: 700;
+  color: var(--color-primary);
+`
+
+const AddonChipUnit = styled.span`
+  padding: 0.05rem 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-info-soft);
+  color: var(--color-info);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+`
+
 const Actions = styled.div`
   display: flex;
   gap: 0.375rem;
@@ -151,12 +179,34 @@ const Actions = styled.div`
 
 function ServiceList({
   services,
+  tab = 'active',
   onEdit,
   onToggleActive,
   onScheduleRange,
+  onManageAddons,
   onCreate,
 }) {
   if (services.length === 0) {
+    if (tab === 'inactive') {
+      return (
+        <EmptyState
+          icon={<FaScissors size={26} />}
+          title="Sin servicios inactivos"
+          description="Acá van a aparecer los servicios que desactives."
+        />
+      )
+    }
+
+    if (tab === 'scheduled') {
+      return (
+        <EmptyState
+          icon={<FaCalendarDays size={26} />}
+          title="Sin servicios programados"
+          description="Acá van a aparecer los servicios activados por rango de fechas."
+        />
+      )
+    }
+
     return (
       <EmptyState
         icon={<FaScissors size={26} />}
@@ -189,9 +239,6 @@ function ServiceList({
                 {service.active ? 'Activo' : 'Inactivo'}
               </Badge>
             </NameRow>
-            {service.description && (
-              <Description>{service.description}</Description>
-            )}
             <Meta>
               <Chip>
                 <FaClock size={12} />
@@ -214,9 +261,31 @@ function ServiceList({
                 </RangeChip>
               )}
             </Meta>
+            {Array.isArray(service.addons) && service.addons.length > 0 && (
+              <AddonsRow>
+                {service.addons.map((addon) => (
+                  <AddonChip key={addon.id}>
+                    {addon.icon && <BarberIcon id={addon.icon} size={12} />}
+                    {addon.name}
+                    {typeof addon.price === 'number' && addon.price > 0 && (
+                      <AddonChipPrice>+{formatPrice(addon.price)}</AddonChipPrice>
+                    )}
+                    {addon.incremental && <AddonChipUnit>por uña</AddonChipUnit>}
+                  </AddonChip>
+                ))}
+              </AddonsRow>
+            )}
           </Info>
 
           <Actions>
+            <IconButton
+              type="button"
+              title="Adicionales"
+              aria-label="Gestionar adicionales"
+              onClick={() => onManageAddons(service)}
+            >
+              <FaListCheck size={15} />
+            </IconButton>
             <IconButton
               type="button"
               title="Editar"

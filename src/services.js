@@ -14,34 +14,61 @@ const toService = (snapshot) => ({
   ...snapshot.data(),
 })
 
+export function normalizeAddons(addons) {
+  if (!Array.isArray(addons)) return []
+  return addons
+    .map((addon) => ({
+      id: addon?.id || newId(),
+      name: String(addon?.name ?? '').trim(),
+      price: Number(addon?.price) || 0,
+      duration: Number(addon?.duration) || 0,
+      points: Number(addon?.points) || 0,
+      icon: addon?.icon || '',
+      incremental: !!addon?.incremental,
+    }))
+    .filter((addon) => addon.name)
+}
+
+function newId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  return `addon-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 export async function fetchServices() {
   const snapshot = await getDocs(collection(db, SERVICES_COLLECTION))
   return snapshot.docs.map(toService)
 }
 
-export async function createService({ name, description, duration, price, points, icon }) {
+export async function createService({ name, duration, price, points, icon, addons }) {
   const now = new Date().toISOString()
   await addDoc(collection(db, SERVICES_COLLECTION), {
     name,
-    description,
     duration,
     price,
     points: Number(points) || 0,
     icon,
+    addons: normalizeAddons(addons),
     active: true,
     createdAt: now,
     updatedAt: now,
   })
 }
 
-export async function updateService(id, { name, description, duration, price, points, icon }) {
+export async function updateService(id, { name, duration, price, points, icon, addons }) {
   await updateDoc(doc(db, SERVICES_COLLECTION, id), {
     name,
-    description,
     duration,
     price,
     points: Number(points) || 0,
     icon,
+    ...(addons !== undefined ? { addons: normalizeAddons(addons) } : {}),
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+export async function setServiceAddons(id, addons) {
+  await updateDoc(doc(db, SERVICES_COLLECTION, id), {
+    addons: normalizeAddons(addons),
     updatedAt: new Date().toISOString(),
   })
 }

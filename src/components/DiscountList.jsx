@@ -142,7 +142,14 @@ const ServicesChip = styled.span`
   color: var(--color-text-muted);
 `
 
-function DiscountList({ discounts, services, onEdit, onToggleActive, onCreate }) {
+function DiscountList({
+  discounts,
+  tab = 'active',
+  services,
+  onEdit,
+  onToggleActive,
+  onCreate,
+}) {
   const serviceById = Object.fromEntries(
     (services || []).map((service) => [service.id, service]),
   )
@@ -153,6 +160,16 @@ function DiscountList({ discounts, services, onEdit, onToggleActive, onCreate })
   }
 
   if (discounts.length === 0) {
+    if (tab === 'inactive') {
+      return (
+        <EmptyState
+          icon={<FaTag size={26} />}
+          title="Sin descuentos inactivos"
+          description="Acá van a aparecer los descuentos que desactives."
+        />
+      )
+    }
+
     return (
       <EmptyState
         icon={<FaTag size={26} />}

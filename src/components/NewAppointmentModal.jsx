@@ -12,6 +12,7 @@ import {
   FaXmark,
 } from 'react-icons/fa6'
 import { Alert, Button, ErrorText, Field, Input, Label, SecondaryButton, Spinner } from './ui'
+import BarberIcon from './BarberIcon'
 import {
   APPOINTMENT_STATUS,
   createAppointment,
@@ -146,6 +147,139 @@ const ServiceChipMeta = styled.span`
   font-size: 0.72rem;
   font-weight: 500;
   color: var(--color-text-muted);
+`
+
+const AddonsGroup = styled.div`
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+`
+
+const AddonsGroupTitle = styled.p`
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+`
+
+const AddonOptions = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+`
+
+const AddonOption = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid
+    ${({ $active }) => ($active ? 'var(--color-primary)' : 'var(--color-border-strong)')};
+  border-radius: var(--radius-sm);
+  background: ${({ $active }) => ($active ? 'var(--color-primary-soft)' : 'var(--color-surface)')};
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+`
+
+const AddonToggle = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+`
+
+const AddonCheck = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 0.3rem;
+  border: 1.5px solid
+    ${({ $checked }) => ($checked ? 'var(--color-primary)' : 'var(--color-border-strong)')};
+  background: ${({ $checked }) => ($checked ? 'var(--color-primary)' : 'transparent')};
+  color: var(--color-on-primary);
+  flex-shrink: 0;
+`
+
+const AddonQty = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+`
+
+const QtyButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+`
+
+const QtyValue = styled.span`
+  min-width: 1.25rem;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+`
+
+const AddonOptionMain = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 1;
+  min-width: 0;
+`
+
+const AddonQtyTag = styled.span`
+  padding: 0.05rem 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 0.66rem;
+  font-weight: 800;
+  flex-shrink: 0;
+`
+
+const AddonOptionMeta = styled.span`
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 `
 
 const Row = styled.div`
@@ -430,8 +564,15 @@ const Actions = styled.div`
 `
 
 function parseDate(dateString) {
+  if (!dateString) return null
   const [y, m, d] = dateString.split('-').map(Number)
-  return new Date(y, m - 1, d)
+  if (!y || !m || !d) return null
+  const parsed = new Date(y, m - 1, d)
+  const valid =
+    parsed.getFullYear() === y &&
+    parsed.getMonth() === m - 1 &&
+    parsed.getDate() === d
+  return valid ? parsed : null
 }
 
 function normalizeText(value) {
@@ -469,6 +610,16 @@ function NewAppointmentModal({
   const [serviceIds, setServiceIds] = useState(() =>
     Array.isArray(appointment?.serviceIds) ? [...appointment.serviceIds] : [],
   )
+  const [addonQuantities, setAddonQuantities] = useState(() => {
+    const initial = {}
+    if (Array.isArray(appointment?.addons)) {
+      appointment.addons.forEach((addon) => {
+        const qty = Number(addon.quantity)
+        initial[addon.id] = Number.isFinite(qty) && qty > 0 ? qty : 1
+      })
+    }
+    return initial
+  })
   const [selectedDiscountId, setSelectedDiscountId] = useState(
     () => appointment?.discountId || null,
   )
@@ -485,11 +636,51 @@ function NewAppointmentModal({
     .sort((a, b) => a.name.localeCompare(b.name))
   const activeServices = services.filter((s) => isServiceAvailable(s, date))
 
-  const selectedServices = activeServices.filter((s) => serviceIds.includes(s.id))
-  const totalDuration = selectedServices.reduce(
+  const selectedServices = services.filter((s) => serviceIds.includes(s.id))
+
+  const serviceAddonGroups = selectedServices
+    .map((service) => ({
+      service,
+      addons: Array.isArray(service.addons) ? service.addons : [],
+    }))
+    .filter((group) => group.addons.length > 0)
+
+  const acceptedAddons = selectedServices.flatMap((service) =>
+    (Array.isArray(service.addons) ? service.addons : [])
+      .filter((addon) => (addonQuantities[addon.id] || 0) > 0)
+      .map((addon) => ({
+        id: addon.id,
+        serviceId: service.id,
+        name: addon.name,
+        icon: addon.icon || '',
+        quantity: addon.incremental ? addonQuantities[addon.id] || 1 : 1,
+        price: Number(addon.price) || 0,
+        duration: Number(addon.duration) || 0,
+        points: Number(addon.points) || 0,
+      })),
+  )
+
+  const addonQuantity = (addonId) => addonQuantities[addonId] || 0
+
+  const unavailableServices = selectedServices.filter(
+    (s) => !isServiceAvailable(s, date),
+  )
+
+  const visibleServices = [
+    ...activeServices,
+    ...selectedServices.filter(
+      (s) => !activeServices.some((active) => active.id === s.id),
+    ),
+  ]
+  const servicesDuration = selectedServices.reduce(
     (sum, s) => sum + (Number(s.duration) || 0),
     0,
   )
+  const addonsDuration = acceptedAddons.reduce(
+    (sum, a) => sum + a.duration * a.quantity,
+    0,
+  )
+  const totalDuration = servicesDuration + addonsDuration
 
   const selectedClient =
     clients.find((c) => c.id === clientId) ||
@@ -503,14 +694,24 @@ function NewAppointmentModal({
   const applicableDiscount =
     applicableDiscounts.find((d) => d.id === selectedDiscountId) ||
     getDefaultDiscount(applicableDiscounts)
-  const subtotal = selectedServices.reduce(
+  const servicesSubtotal = selectedServices.reduce(
     (sum, s) => sum + (Number(s.price) || 0),
     0,
   )
-  const pointsToEarn = selectedServices.reduce(
+  const addonsSubtotal = acceptedAddons.reduce(
+    (sum, a) => sum + a.price * a.quantity,
+    0,
+  )
+  const subtotal = servicesSubtotal + addonsSubtotal
+  const servicesPoints = selectedServices.reduce(
     (sum, s) => sum + (Number(s.points) || 0),
     0,
   )
+  const addonsPoints = acceptedAddons.reduce(
+    (sum, a) => sum + a.points * a.quantity,
+    0,
+  )
+  const pointsToEarn = servicesPoints + addonsPoints
   const { discountAmount, total } = applyDiscountToTotal(
     subtotal,
     applicableDiscount,
@@ -612,12 +813,46 @@ function NewAppointmentModal({
   const handleDateChange = (event) => {
     setDate(event.target.value)
     setStartTime('')
+    setErrors((prev) => ({ ...prev, date: undefined, serviceIds: undefined }))
   }
 
   const toggleService = (id) => {
+    const removing = serviceIds.includes(id)
+    if (removing) {
+      const service = services.find((s) => s.id === id)
+      setAddonQuantities((prev) => {
+        const next = { ...prev }
+        ;(Array.isArray(service?.addons) ? service.addons : []).forEach((addon) => {
+          delete next[addon.id]
+        })
+        return next
+      })
+    }
     setServiceIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+      removing ? prev.filter((x) => x !== id) : [...prev, id],
     )
+  }
+
+  const toggleAddon = (id) => {
+    setAddonQuantities((prev) => {
+      const next = { ...prev }
+      if (next[id]) delete next[id]
+      else next[id] = 1
+      return next
+    })
+  }
+
+  const changeAddonQuantity = (id, delta) => {
+    setAddonQuantities((prev) => {
+      const current = prev[id] || 0
+      const nextQuantity = current + delta
+      if (nextQuantity <= 0) {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      }
+      return { ...prev, [id]: nextQuantity }
+    })
   }
 
   const handleClientQueryChange = (event) => {
@@ -653,6 +888,9 @@ function NewAppointmentModal({
 
   const validate = () => {
     const nextErrors = {}
+    const todayStr = formatDateString(today)
+    const parsedDate = parseDate(date)
+    const isPastDate = !!date && date < todayStr && date !== appointment?.date
 
     if (!clientId) {
       nextErrors.clientId = 'Elegí una cliente.'
@@ -664,8 +902,15 @@ function NewAppointmentModal({
 
     if (!date) {
       nextErrors.date = 'Elegí una fecha.'
-    } else if (isSunday(parseDate(date))) {
+    } else if (!parsedDate) {
+      nextErrors.date = 'La fecha elegida no es válida.'
+    } else if (isPastDate) {
+      nextErrors.date = 'No podés agendar en una fecha pasada.'
+    } else if (isSunday(parsedDate)) {
       nextErrors.date = 'Los domingos no hay atención.'
+    } else if (unavailableServices.length > 0) {
+      const names = unavailableServices.map((s) => s.name).join(', ')
+      nextErrors.date = `Estos servicios no están disponibles en la fecha elegida: ${names}.`
     }
 
     if (!startTime) {
@@ -696,6 +941,7 @@ function NewAppointmentModal({
         await updateAppointment(appointment.id, {
           clientId: resolvedClientId,
           serviceIds,
+          addons: acceptedAddons,
           date,
           startTime,
           endTime: slot.endTime,
@@ -708,6 +954,7 @@ function NewAppointmentModal({
         await createAppointment({
           clientId: resolvedClientId,
           serviceIds,
+          addons: acceptedAddons,
           date,
           startTime,
           endTime: slot.endTime,
@@ -806,14 +1053,14 @@ function NewAppointmentModal({
 
             <Field>
               <Label>Servicios</Label>
-              {activeServices.length === 0 ? (
+              {visibleServices.length === 0 ? (
                 <ErrorText>
                   No hay servicios activos. Creá uno en la sección Servicios.
                 </ErrorText>
               ) : (
                 <>
                   <ServiceGrid>
-                    {activeServices.map((s) => {
+                    {visibleServices.map((s) => {
                       const checked = serviceIds.includes(s.id)
                       return (
                         <ServiceChip
@@ -849,6 +1096,84 @@ function NewAppointmentModal({
                       {totalDuration ? ` · ${formatDuration(totalDuration)}` : ''}
                     </Hint>
                   )}
+
+                  {serviceAddonGroups.map((group) => (
+                    <AddonsGroup key={group.service.id}>
+                      <AddonsGroupTitle>
+                        Adicionales de {group.service.name} · la clienta acepta o no
+                      </AddonsGroupTitle>
+                      <AddonOptions>
+                        {group.addons.map((addon) => {
+                          const rawQuantity = addonQuantity(addon.id)
+                          const accepted = rawQuantity > 0
+                          const quantity = accepted
+                            ? addon.incremental
+                              ? rawQuantity
+                              : 1
+                            : 0
+                          const qty = accepted ? quantity : 1
+                          const unitPrice = Number(addon.price) || 0
+                          const unitDuration = Number(addon.duration) || 0
+                          const unitPoints = Number(addon.points) || 0
+                          const meta = [
+                            unitPrice > 0
+                              ? `+${formatPrice(unitPrice * qty)}`
+                              : '',
+                            unitDuration > 0
+                              ? `+${formatDuration(unitDuration * qty)}`
+                              : '',
+                            unitPoints > 0
+                              ? `+${unitPoints * qty} pt${
+                                  unitPoints * qty === 1 ? '' : 's'
+                                }`
+                              : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')
+                          return (
+                            <AddonOption key={addon.id} $active={accepted}>
+                              <AddonToggle
+                                type="button"
+                                aria-pressed={accepted}
+                                onClick={() => toggleAddon(addon.id)}
+                              >
+                                <AddonCheck $checked={accepted}>
+                                  {accepted && <FaCheck size={11} />}
+                                </AddonCheck>
+                                <AddonOptionMain>
+                                  {addon.icon && <BarberIcon id={addon.icon} size={14} />}
+                                  <span>{addon.name}</span>
+                                  {quantity > 1 && (
+                                    <AddonQtyTag>×{quantity}</AddonQtyTag>
+                                  )}
+                                </AddonOptionMain>
+                              </AddonToggle>
+                              {meta && <AddonOptionMeta>{meta}</AddonOptionMeta>}
+                              {accepted && addon.incremental && (
+                                <AddonQty>
+                                  <QtyButton
+                                    type="button"
+                                    onClick={() => changeAddonQuantity(addon.id, -1)}
+                                    aria-label={`Quitar uno de ${addon.name}`}
+                                  >
+                                    −
+                                  </QtyButton>
+                                  <QtyValue>{quantity}</QtyValue>
+                                  <QtyButton
+                                    type="button"
+                                    onClick={() => changeAddonQuantity(addon.id, 1)}
+                                    aria-label={`Agregar uno de ${addon.name}`}
+                                  >
+                                    +
+                                  </QtyButton>
+                                </AddonQty>
+                              )}
+                            </AddonOption>
+                          )
+                        })}
+                      </AddonOptions>
+                    </AddonsGroup>
+                  ))}
                 </>
               )}
             </Field>
@@ -927,6 +1252,12 @@ function NewAppointmentModal({
                   <span>Subtotal</span>
                   <span>{formatPrice(subtotal)}</span>
                 </SummaryRow>
+                {addonsSubtotal > 0 && (
+                  <SummaryRow>
+                    <span>Adicionales aceptados</span>
+                    <span>+{formatPrice(addonsSubtotal)}</span>
+                  </SummaryRow>
+                )}
                 {applicableDiscount ? (
                   <DiscountRow>
                     <span>

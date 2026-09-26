@@ -4,6 +4,7 @@ import { FaCircleCheck, FaPlus, FaTag, FaTriangleExclamation } from 'react-icons
 import ConfirmModal from '../components/ConfirmModal'
 import DiscountForm from '../components/DiscountForm'
 import DiscountList from '../components/DiscountList'
+import Tabs from '../components/Tabs'
 import { Alert, Button, Spinner } from '../components/ui'
 import {
   createDiscount,
@@ -83,6 +84,7 @@ function Descuentos() {
   const [editing, setEditing] = useState(null)
   const [deactivating, setDeactivating] = useState(null)
   const [deactivatingLoading, setDeactivatingLoading] = useState(false)
+  const [tab, setTab] = useState('active')
 
   const noticeTimer = useRef(null)
 
@@ -201,6 +203,10 @@ function Descuentos() {
     setEditing(null)
   }
 
+  const activeDiscounts = discounts.filter((discount) => discount.active !== false)
+  const inactiveDiscounts = discounts.filter((discount) => discount.active === false)
+  const visibleDiscounts = tab === 'active' ? activeDiscounts : inactiveDiscounts
+
   return (
     <Wrapper>
       <PageHeader>
@@ -259,13 +265,24 @@ function Descuentos() {
           </Button>
         </ErrorWrap>
       ) : (
-        <DiscountList
-          discounts={discounts}
-          services={services}
-          onEdit={openEdit}
-          onToggleActive={handleToggleActive}
-          onCreate={openCreate}
-        />
+        <>
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            items={[
+              { key: 'active', label: 'Activos', count: activeDiscounts.length },
+              { key: 'inactive', label: 'Inactivos', count: inactiveDiscounts.length },
+            ]}
+          />
+          <DiscountList
+            discounts={visibleDiscounts}
+            tab={tab}
+            services={services}
+            onEdit={openEdit}
+            onToggleActive={handleToggleActive}
+            onCreate={openCreate}
+          />
+        </>
       )}
 
       {deactivating && (

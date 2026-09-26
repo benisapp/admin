@@ -13,7 +13,7 @@ import {
 } from 'react-icons/fa6'
 import { APPOINTMENT_STATUS, getAppointmentsByClient } from '../appointments'
 import { STATUS_OPTIONS } from '../appointmentStatus'
-import { apptServiceNames } from '../utils/appointmentServices'
+import { apptFullNames } from '../utils/appointmentServices'
 import { formatDateLong, formatTime12h, isSlotInPast } from '../utils/dates'
 import { Alert, Button, EmptyState, Spinner } from './ui'
 
@@ -341,7 +341,7 @@ function ClientFicha({
               {formatTime12h(nextAppt.endTime)}
             </NextLine>
             <NextService>
-              {apptServiceNames(nextAppt, serviceMap)}
+              {apptFullNames(nextAppt, serviceMap)}
             </NextService>
             <StatusLabel status={nextAppt.status} />
           </NextCard>
@@ -367,7 +367,7 @@ function ClientFicha({
                 <HistoryDate>{formatDateLong(appt.date)}</HistoryDate>
                 <HistoryInfo>
                   <HistoryService>
-                    {apptServiceNames(appt, serviceMap)}
+                    {apptFullNames(appt, serviceMap)}
                   </HistoryService>
                   <HistoryTime>
                     <FaClock size={11} />

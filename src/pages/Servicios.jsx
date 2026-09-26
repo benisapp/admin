@@ -4,13 +4,16 @@ import { FaCircleCheck, FaPlus, FaTriangleExclamation } from 'react-icons/fa6'
 import ConfirmModal from '../components/ConfirmModal'
 import ServiceForm from '../components/ServiceForm'
 import ServiceList from '../components/ServiceList'
+import ServiceAddonsModal from '../components/ServiceAddonsModal'
 import ServiceRangeModal from '../components/ServiceRangeModal'
+import Tabs from '../components/Tabs'
 import { Alert, Button, Spinner } from '../components/ui'
 import {
   createService,
   fetchServices,
   setServiceActive,
   setServiceActiveRange,
+  setServiceAddons,
   updateService,
 } from '../services'
 
@@ -80,6 +83,8 @@ function Servicios() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
   const [rangeService, setRangeService] = useState(null)
+  const [addonsService, setAddonsService] = useState(null)
+  const [tab, setTab] = useState('active')
   const [deactivating, setDeactivating] = useState(null)
   const [deactivatingLoading, setDeactivatingLoading] = useState(false)
 
@@ -194,10 +199,32 @@ function Servicios() {
     showNotice('success', 'Rango de activación guardado.')
   }
 
+  const handleSaveAddons = async (addons) => {
+    await setServiceAddons(addonsService.id, addons)
+    await loadServices()
+    showNotice('success', 'Adicionales actualizados.')
+  }
+
   const closeForm = () => {
     setShowForm(false)
     setEditing(null)
   }
+
+  const activeServices = services.filter((service) => service.active !== false)
+  const scheduledServices = services.filter(
+    (service) =>
+      service.active === false && (service.activeFrom || service.activeUntil),
+  )
+  const inactiveServices = services.filter(
+    (service) =>
+      service.active === false && !service.activeFrom && !service.activeUntil,
+  )
+  const visibleServices =
+    tab === 'active'
+      ? activeServices
+      : tab === 'scheduled'
+        ? scheduledServices
+        : inactiveServices
 
   return (
     <Wrapper>
@@ -256,13 +283,26 @@ function Servicios() {
           </Button>
         </ErrorWrap>
       ) : (
-        <ServiceList
-          services={services}
-          onEdit={openEdit}
-          onToggleActive={handleToggleActive}
-          onScheduleRange={setRangeService}
-          onCreate={openCreate}
-        />
+        <>
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            items={[
+              { key: 'active', label: 'Activos', count: activeServices.length },
+              { key: 'scheduled', label: 'Activos por fecha', count: scheduledServices.length },
+              { key: 'inactive', label: 'Inactivos', count: inactiveServices.length },
+            ]}
+          />
+          <ServiceList
+            services={visibleServices}
+            tab={tab}
+            onEdit={openEdit}
+            onToggleActive={handleToggleActive}
+            onScheduleRange={setRangeService}
+            onManageAddons={setAddonsService}
+            onCreate={openCreate}
+          />
+        </>
       )}
 
       {rangeService && (
@@ -270,6 +310,14 @@ function Servicios() {
           service={rangeService}
           onSave={handleSaveRange}
           onClose={() => setRangeService(null)}
+        />
+      )}
+
+      {addonsService && (
+        <ServiceAddonsModal
+          service={addonsService}
+          onSave={handleSaveAddons}
+          onClose={() => setAddonsService(null)}
         />
       )}
 

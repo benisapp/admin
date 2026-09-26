@@ -58,13 +58,26 @@ export async function updateAppointmentStatus(id, status) {
   })
 }
 
+const toAddons = (addons) => (Array.isArray(addons) ? addons : [])
+
 export async function updateAppointment(
   id,
-  { clientId, serviceIds, date, startTime, endTime, discountId, discountTitle, discountPercent },
+  {
+    clientId,
+    serviceIds,
+    addons,
+    date,
+    startTime,
+    endTime,
+    discountId,
+    discountTitle,
+    discountPercent,
+  },
 ) {
   await updateDoc(doc(db, APPOINTMENTS_COLLECTION, id), {
     clientId,
     serviceIds,
+    addons: toAddons(addons),
     date,
     startTime,
     endTime,
@@ -78,6 +91,7 @@ export async function updateAppointment(
 export async function createAppointment({
   clientId,
   serviceIds,
+  addons,
   date,
   startTime,
   endTime,
@@ -89,6 +103,7 @@ export async function createAppointment({
   const ref = await addDoc(collection(db, APPOINTMENTS_COLLECTION), {
     clientId,
     serviceIds,
+    addons: toAddons(addons),
     date,
     startTime,
     endTime,
@@ -104,6 +119,7 @@ export async function createAppointment({
     id: ref.id,
     clientId,
     serviceIds,
+    addons: toAddons(addons),
     date,
     startTime,
     endTime,

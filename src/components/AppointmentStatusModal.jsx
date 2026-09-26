@@ -3,7 +3,7 @@ import styled from 'styled-components'
 import { FaBan, FaCheck, FaClock, FaUser, FaXmark } from 'react-icons/fa6'
 import { APPOINTMENT_STATUS } from '../appointments'
 import { STATUS_OPTIONS } from '../appointmentStatus'
-import { formatServiceNames } from '../utils/appointmentServices'
+import { formatAddonNames, formatServiceNames } from '../utils/appointmentServices'
 import { formatTime12h } from '../utils/dates'
 import { Button, SecondaryButton } from './ui'
 
@@ -186,6 +186,7 @@ function AppointmentStatusModal({
   appointment,
   client,
   services,
+  addons = [],
   onSave,
   onCancel,
   onClose,
@@ -240,6 +241,12 @@ function AppointmentStatusModal({
               <FaUser size={12} />
               {formatServiceNames(services)}
             </SummaryLine>
+            {addons.length > 0 && (
+              <SummaryLine>
+                <FaClock size={12} />
+                Adicionales: {formatAddonNames(addons)}
+              </SummaryLine>
+            )}
             <SummaryLine>
               <FaClock size={12} />
               {formatTime12h(appointment.startTime)}
