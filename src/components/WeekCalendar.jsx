@@ -4,28 +4,30 @@ import {
   FaAngleLeft,
   FaAngleRight,
   FaCalendarDays,
+  FaPlus,
   FaTriangleExclamation,
 } from 'react-icons/fa6'
 import {
   APPOINTMENT_STATUS,
-  getAppointmentsByRange,
-  updateAppointmentStatus,
+  watchAppointmentsByRange,
 } from '../appointments'
 import { STATUS_OPTIONS } from '../appointmentStatus'
 import { fetchClients } from '../clients'
+import { fetchDiscounts } from '../discounts'
 import { fetchServices } from '../services'
-import { syncAppointmentPoints } from '../points'
+import { changeAppointmentStatus } from '../points'
 import { getSchedule } from '../settings'
 import { apptFullNames, getAppointmentAddons, getAppointmentServices } from '../utils/appointmentServices'
 import AppointmentStatusModal from './AppointmentStatusModal'
 import CancelAppointmentModal from './CancelAppointmentModal'
+import NewAppointmentModal from './NewAppointmentModal'
 import {
   addDays,
   formatDateString,
   formatTime12h,
   formatWeekRange,
+  isRestDay,
   isSameDay,
-  isSunday,
   startOfWeek,
 } from '../utils/dates'
 import { Alert, Spinner } from './ui'
@@ -170,6 +172,10 @@ const TodayButton = styled.button`
   }
 `
 
+const NoticeBar = styled.div`
+  padding: 0.875rem 1.25rem 0;
+`
+
 const WeekGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -287,22 +293,25 @@ const ApptDiscount = styled.span`
   color: var(--color-success);
 `
 
-const WeekFree = styled.div`
+const WeekFree = styled.button`
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  width: 100%;
   padding: 0.4rem 0.625rem;
   border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--color-text-subtle);
+  font: inherit;
   font-size: 0.72rem;
-`
+  text-align: left;
+  cursor: pointer;
 
-const WeekClosed = styled.div`
-  padding: 1rem 0.5rem;
-  text-align: center;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
 `
 
 const Loading = styled.div`
@@ -328,11 +337,15 @@ function WeekCalendar() {
   const [appointments, setAppointments] = useState([])
   const [clients, setClients] = useState([])
   const [services, setServices] = useState([])
+  const [discounts, setDiscounts] = useState([])
   const [schedule, setSchedule] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [statusAppt, setStatusAppt] = useState(null)
   const [cancelAppt, setCancelAppt] = useState(null)
+  const [editAppt, setEditAppt] = useState(null)
+  const [newAppt, setNewAppt] = useState(null)
+  const [notice, setNotice] = useState(null)
   const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
@@ -343,7 +356,13 @@ function WeekCalendar() {
       })
       .catch(() => {
         if (!cancelled) {
-          setSchedule({ openTime: '09:00', closeTime: '19:00', slotStep: 0 })
+          setSchedule({
+            openTime: '09:00',
+            closeTime: '19:00',
+            slotStep: 0,
+            calendarStep: 30,
+            restDay: 0,
+          })
         }
       })
     return () => {
@@ -353,11 +372,12 @@ function WeekCalendar() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([fetchClients(), fetchServices()])
-      .then(([clientList, serviceList]) => {
+    Promise.all([fetchClients(), fetchServices(), fetchDiscounts()])
+      .then(([clientList, serviceList, discountList]) => {
         if (!cancelled) {
           setClients(clientList)
           setServices(serviceList)
+          setDiscounts(discountList)
         }
       })
       .catch((err) => console.error(err))
@@ -367,25 +387,25 @@ function WeekCalendar() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
+    // eslint-disable-next-line react/set-state-in-effect
     setLoading(true)
     setLoadError(false)
     const startStr = formatDateString(weekStart)
     const endStr = formatDateString(addDays(weekStart, 6))
-    getAppointmentsByRange(startStr, endStr)
-      .then((appts) => {
-        if (!cancelled) setAppointments(appts)
-      })
-      .catch((err) => {
+    return watchAppointmentsByRange(
+      startStr,
+      endStr,
+      (appts) => {
+        setAppointments(appts)
+        setLoadError(false)
+        setLoading(false)
+      },
+      (err) => {
         console.error(err)
-        if (!cancelled) setLoadError(true)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
+        setLoadError(true)
+        setLoading(false)
+      },
+    )
   }, [weekStart, reloadToken])
 
   const clientMap = useMemo(
@@ -407,24 +427,35 @@ function WeekCalendar() {
   const goToThisWeek = () => setWeekStart(startOfWeek(new Date()))
 
   const handleStatusChange = async (appt, status) => {
-    const pointsAwarded = await syncAppointmentPoints({
+    const { pointsAwarded } = await changeAppointmentStatus({
       appointment: appt,
       services,
       newStatus: status,
     })
-    await updateAppointmentStatus(appt.id, status)
     setAppointments((prev) =>
       prev.map((a) => (a.id === appt.id ? { ...a, status, pointsAwarded } : a)),
     )
   }
 
+  const handleAppointmentCreated = () => {
+    setNewAppt(null)
+    setReloadToken((t) => t + 1)
+    setNotice({ tone: 'success', text: 'Cita creada correctamente.' })
+  }
+
+  const handleAppointmentEdited = () => {
+    setEditAppt(null)
+    setReloadToken((t) => t + 1)
+    setNotice({ tone: 'success', text: 'Cita actualizada correctamente.' })
+  }
+
   const handleCancelAppointment = async (appt) => {
-    const pointsAwarded = await syncAppointmentPoints({
+    const { pointsAwarded } = await changeAppointmentStatus({
       appointment: appt,
       services,
       newStatus: APPOINTMENT_STATUS.CANCELLED,
+      extra: { cancelledAt: new Date().toISOString() },
     })
-    await updateAppointmentStatus(appt.id, APPOINTMENT_STATUS.CANCELLED)
     setAppointments((prev) =>
       prev.map((a) =>
         a.id === appt.id
@@ -461,7 +492,7 @@ function WeekCalendar() {
       <WeekGrid>
         {days.map((day) => {
           const dateKey = formatDateString(day)
-          const sunday = isSunday(day)
+          const isRest = isRestDay(day, schedule?.restDay ?? 0)
           const today = isSameDay(day, new Date())
           const dayAppts = appointments
             .filter(
@@ -470,7 +501,7 @@ function WeekCalendar() {
                 a.status !== APPOINTMENT_STATUS.CANCELLED,
             )
             .sort((a, b) => a.startTime.localeCompare(b.startTime))
-          const freeBlocks = sunday ? [] : computeFreeBlocks(dayAppts, schedule)
+          const freeBlocks = computeFreeBlocks(dayAppts, schedule)
           const count = dayAppts.length
 
           const entries = [
@@ -484,18 +515,22 @@ function WeekCalendar() {
                 <DayName>{weekdayLabel(day)}</DayName>
                 <DayNumber>{day.getDate()}</DayNumber>
                 <DayCount>
-                  {sunday ? 'Cerrado' : `${count} ${count === 1 ? 'cita' : 'citas'}`}
+                  {`${count} ${count === 1 ? 'cita' : 'citas'}`}
+                  {isRest ? ' · Descanso' : ''}
                 </DayCount>
               </DayColHeader>
 
               <DayColBody>
-                {sunday ? (
-                  <WeekClosed>Cerrado</WeekClosed>
-                ) : (
-                  entries.map((entry) => {
+                {entries.map((entry) => {
                     if (entry.type === 'free') {
                       return (
-                        <WeekFree key={`free-${entry.block.start}-${entry.block.end}`}>
+                        <WeekFree
+                          key={`free-${entry.block.start}-${entry.block.end}`}
+                          type="button"
+                          onClick={() =>
+                            setNewAppt({ date: dateKey, time: entry.block.start })
+                          }
+                        >
                           <span>
                             {formatTime12h(entry.block.start)} -{' '}
                             {formatTime12h(entry.block.end)}
@@ -532,8 +567,7 @@ function WeekCalendar() {
                         )}
                       </WeekAppt>
                     )
-                  })
-                )}
+                  })}
               </DayColBody>
             </DayColumn>
           )
@@ -568,11 +602,35 @@ function WeekCalendar() {
             <NavButton type="button" onClick={goToNextWeek} aria-label="Semana siguiente">
               <FaAngleRight size={16} />
             </NavButton>
+            <TodayButton
+              type="button"
+              onClick={() => setNewAppt({ date: formatDateString(new Date()), time: '' })}
+            >
+              <FaPlus size={12} /> Nueva cita
+            </TodayButton>
           </Controls>
         </Header>
 
+        {notice && (
+          <NoticeBar>
+            <Alert tone={notice.tone}>{notice.text}</Alert>
+          </NoticeBar>
+        )}
+
         {renderBody()}
       </Card>
+
+      {newAppt && (
+        <NewAppointmentModal
+          initialDate={new Date(`${newAppt.date}T00:00:00`)}
+          initialTime={newAppt.time}
+          clients={clients}
+          services={services}
+          discounts={discounts}
+          onCreated={handleAppointmentCreated}
+          onClose={() => setNewAppt(null)}
+        />
+      )}
 
       {statusAppt && (
         <AppointmentStatusModal
@@ -581,11 +639,25 @@ function WeekCalendar() {
           services={getAppointmentServices(statusAppt, serviceMap)}
           addons={getAppointmentAddons(statusAppt)}
           onSave={(status) => handleStatusChange(statusAppt, status)}
+          onEdit={() => {
+            setEditAppt(statusAppt)
+            setStatusAppt(null)
+          }}
           onCancel={() => {
             setCancelAppt(statusAppt)
             setStatusAppt(null)
           }}
           onClose={() => setStatusAppt(null)}
+        />
+      )}
+      {editAppt && (
+        <NewAppointmentModal
+          appointment={editAppt}
+          clients={clients}
+          services={services}
+          discounts={discounts}
+          onEdited={handleAppointmentEdited}
+          onClose={() => setEditAppt(null)}
         />
       )}
       {cancelAppt && (

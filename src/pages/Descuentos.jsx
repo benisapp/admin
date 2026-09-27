@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
-import { FaCircleCheck, FaPlus, FaTag, FaTriangleExclamation } from 'react-icons/fa6'
+import { FaCircleCheck, FaPlus, FaTriangleExclamation } from 'react-icons/fa6'
 import ConfirmModal from '../components/ConfirmModal'
 import DiscountForm from '../components/DiscountForm'
 import DiscountList from '../components/DiscountList'
@@ -241,6 +241,7 @@ function Descuentos() {
 
       {showForm && (
         <DiscountForm
+          key={editing?.id || 'new'}
           initialValues={editing ?? {}}
           services={services}
           submitLabel={editing ? 'Guardar cambios' : 'Crear descuento'}

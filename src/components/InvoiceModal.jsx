@@ -269,7 +269,7 @@ function InvoiceModal({ data, onClose }) {
 
   return (
     <Overlay onClick={onClose}>
-      <Dialog onClick={(e) => e.stopPropagation()}>
+      <Dialog role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Header>
           <div>
             <Title>Factura</Title>

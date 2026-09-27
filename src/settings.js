@@ -9,7 +9,9 @@ export const DEFAULT_SCHEDULE = {
   openTime: '09:00',
   closeTime: '19:00',
   slotStep: 0,
+  calendarStep: 30,
   daysAhead: 3,
+  restDay: 0,
 }
 
 export async function getSchedule() {
@@ -19,13 +21,23 @@ export async function getSchedule() {
   return { ...DEFAULT_SCHEDULE, ...snapshot.data() }
 }
 
-export async function saveSchedule({ adminPhone, openTime, closeTime, slotStep, daysAhead }) {
+export async function saveSchedule({
+  adminPhone,
+  openTime,
+  closeTime,
+  slotStep,
+  calendarStep,
+  daysAhead,
+  restDay,
+}) {
   await setDoc(doc(db, SETTINGS_COLLECTION, SCHEDULE_DOC), {
     adminPhone,
     openTime,
     closeTime,
     slotStep,
+    calendarStep,
     daysAhead,
+    restDay,
     updatedAt: new Date().toISOString(),
   })
 }

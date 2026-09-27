@@ -8,7 +8,7 @@ import {
   FaUser,
   FaUsers,
 } from 'react-icons/fa6'
-import { fetchClients, normalizePhone } from '../clients'
+import { fetchClients, normalizePhone, watchClients } from '../clients'
 import { fetchServices } from '../services'
 import { fetchDiscounts } from '../discounts'
 import NewAppointmentModal from '../components/NewAppointmentModal'
@@ -201,17 +201,31 @@ function Clientes({ initialClientId, onSelectClient }) {
     }
   }, [])
 
+  // Mantiene la lista de clientes en tiempo real.
+  useEffect(() => {
+    return watchClients(
+      (list) =>
+        setClients(
+          [...list].sort((a, b) =>
+            (a.name || '').localeCompare(b.name || ''),
+          ),
+        ),
+      (err) => console.error(err),
+    )
+  }, [])
+
   // Sincroniza la ficha con la URL cuando el usuario navega con
   // los botones atrás/adelante del navegador.
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     setSelectedClientId(initialClientId || null)
   }, [initialClientId])
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) || null
 
   const queryTrim = query.trim().toLowerCase()
-  const queryNormalized = normalizeText(query)
-  const queryDigits = queryNormalized.replace(/\D/g, '')
+  const queryNormalized = normalizeText(query.trim())
+  const queryDigits = normalizePhone(query)
   const results = !queryTrim
     ? []
     : clients
@@ -221,7 +235,7 @@ function Clientes({ initialClientId, onSelectClient }) {
             queryDigits && normalizePhone(c.phone).includes(queryDigits)
           return nameMatch || phoneMatch
         })
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         .slice(0, 50)
 
   const handleCreated = () => {
@@ -239,6 +253,16 @@ function Clientes({ initialClientId, onSelectClient }) {
     }
     showNotice('success', 'Cliente creada correctamente.')
     openFicha(client.id)
+  }
+
+  const handleClientUpdated = async () => {
+    try {
+      setClients(await fetchClients())
+    } catch (err) {
+      console.error(err)
+    }
+    setFichaReload((t) => t + 1)
+    showNotice('success', 'Cliente actualizada correctamente.')
   }
 
   const handleBack = () => {
@@ -282,6 +306,7 @@ function Clientes({ initialClientId, onSelectClient }) {
           backLabel="Volver"
           onBack={handleBack}
           onNewAppointment={() => setShowNewAppt(true)}
+          onClientUpdated={handleClientUpdated}
         />
       ) : loading ? (
         <Loading>

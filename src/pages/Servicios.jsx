@@ -260,6 +260,7 @@ function Servicios() {
 
       {showForm && (
         <ServiceForm
+          key={editing?.id || 'new'}
           initialValues={editing ?? {}}
           submitLabel={editing ? 'Guardar cambios' : 'Crear servicio'}
           submitting={saving}

@@ -188,7 +188,7 @@ function AddonModal({ addon, onSave, onClose, nested = false }) {
 
   return (
     <Overlay onClick={onClose}>
-      <Dialog onClick={(e) => e.stopPropagation()}>
+      <Dialog role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Header>
           <div>
             <Title>{addon ? 'Editar adicional' : 'Nuevo adicional'}</Title>

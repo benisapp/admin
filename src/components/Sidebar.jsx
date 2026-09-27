@@ -162,6 +162,7 @@ function Sidebar({ active, onNavigate }) {
           key={id}
           type="button"
           $active={active === id}
+          aria-current={active === id ? 'page' : undefined}
           onClick={() => onNavigate(id)}
         >
           <Icon size={18} />

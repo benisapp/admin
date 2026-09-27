@@ -47,8 +47,11 @@ export function buildInvoiceData({ client, items, discount }) {
   }, 0)
   const subtotal = servicesSubtotal + addonsSubtotal
   const discountPercent = discount?.percent ?? null
+  // El descuento aplica solo sobre los servicios, nunca sobre los adicionales.
   const discountAmount =
-    discountPercent != null ? Math.round((subtotal * discountPercent) / 100) : 0
+    discountPercent != null
+      ? Math.round((servicesSubtotal * discountPercent) / 100)
+      : 0
   const total = subtotal - discountAmount
   const services = [
     ...list.map((item) => ({
@@ -94,6 +97,7 @@ export function buildInvoiceData({ client, items, discount }) {
 function buildInvoiceDoc({ client, items, discount }) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
+  const H = doc.internal.pageSize.getHeight()
   const margin = 16
 
   const { code, clientName, contact, date, discountAmount, discountTitle, discountPercent, total, services } =
@@ -129,6 +133,14 @@ function buildInvoiceDoc({ client, items, discount }) {
 
   let y = 56
 
+  // Agrega una página nueva si el contenido no entra en el alto restante.
+  const ensureSpace = (needed) => {
+    if (y + needed > H - margin) {
+      doc.addPage()
+      y = margin + 10
+    }
+  }
+
   doc.setTextColor(...COLORS.ink)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(13)
@@ -163,6 +175,7 @@ function buildInvoiceDoc({ client, items, discount }) {
   doc.setLineWidth(0.3)
 
   services.forEach((service) => {
+    ensureSpace(24)
     const meta = [date, service.time, service.duration].filter(Boolean).join('  ·  ')
 
     doc.setTextColor(...COLORS.ink)
@@ -190,6 +203,7 @@ function buildInvoiceDoc({ client, items, discount }) {
   })
 
   y += 11
+  ensureSpace(30)
 
   if (discountAmount > 0) {
     doc.setFont('helvetica', 'bold')
@@ -214,6 +228,7 @@ function buildInvoiceDoc({ client, items, discount }) {
   doc.setDrawColor(...COLORS.border)
   doc.line(margin, y, W - margin, y)
   y += 14
+  ensureSpace(20)
 
   doc.setTextColor(...COLORS.muted)
   doc.setFont('helvetica', 'normal')

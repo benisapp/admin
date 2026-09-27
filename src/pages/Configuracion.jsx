@@ -3,6 +3,7 @@ import styled from 'styled-components'
 import { FaCircleCheck, FaClock, FaTriangleExclamation } from 'react-icons/fa6'
 import { Alert, Button, ErrorText, Field, Input, Label, Spinner } from '../components/ui'
 import { getSchedule, saveSchedule } from '../settings'
+import { WEEKDAYS } from '../utils/dates'
 
 const Wrapper = styled.div`
   flex: 1;
@@ -130,10 +131,13 @@ function Configuracion() {
     openTime: '09:00',
     closeTime: '19:00',
     slotStep: '',
+    calendarStep: '30',
     daysAhead: '3',
+    restDay: '0',
   })
 
   const noticeTimer = useRef(null)
+  const mountedRef = useRef(true)
 
   const showNotice = (tone, text) => {
     setNotice({ tone, text })
@@ -142,7 +146,9 @@ function Configuracion() {
   }
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
       if (noticeTimer.current) clearTimeout(noticeTimer.current)
     }
   }, [])
@@ -152,18 +158,21 @@ function Configuracion() {
     setLoadError(false)
     try {
       const schedule = await getSchedule()
+      if (!mountedRef.current) return
       setValues({
         adminPhone: schedule.adminPhone ?? '',
         openTime: schedule.openTime,
         closeTime: schedule.closeTime,
         slotStep: schedule.slotStep ? String(schedule.slotStep) : '',
+        calendarStep: String(schedule.calendarStep ?? 30),
         daysAhead: String(schedule.daysAhead ?? 3),
+        restDay: String(schedule.restDay ?? 0),
       })
     } catch (err) {
       console.error(err)
-      setLoadError(true)
+      if (mountedRef.current) setLoadError(true)
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }
 
@@ -210,15 +219,31 @@ function Configuracion() {
       }
     }
 
+    const calendarStep = Number(values.calendarStep)
+    if (
+      values.calendarStep === '' ||
+      Number.isNaN(calendarStep) ||
+      !Number.isInteger(calendarStep) ||
+      calendarStep < 5 ||
+      calendarStep > 240
+    ) {
+      nextErrors.calendarStep =
+        'Ingresá un intervalo entre 5 y 240 minutos.'
+    }
+
     const days = Number(values.daysAhead)
     if (
       values.daysAhead === '' ||
       Number.isNaN(days) ||
       !Number.isInteger(days) ||
       days < 1 ||
-      days > 6
+      days > 90
     ) {
-      nextErrors.daysAhead = 'Ingresá un número entre 1 y 6.'
+      nextErrors.daysAhead = 'Ingresá un número entre 1 y 90.'
+    }
+
+    if (!WEEKDAYS.some((day) => String(day.value) === String(values.restDay))) {
+      nextErrors.restDay = 'Elegí un día de descanso válido.'
     }
 
     setErrors(nextErrors)
@@ -236,7 +261,9 @@ function Configuracion() {
         openTime: values.openTime,
         closeTime: values.closeTime,
         slotStep: values.slotStep === '' ? 0 : Number(values.slotStep),
+        calendarStep: Number(values.calendarStep),
         daysAhead: Number(values.daysAhead),
+        restDay: Number(values.restDay),
       })
       showNotice('success', 'Configuración guardada correctamente.')
     } catch (err) {
@@ -354,19 +381,47 @@ function Configuracion() {
                   min="0"
                   value={values.slotStep}
                   onChange={handleChange}
-                  placeholder="Automático (duración del servicio)"
+                  placeholder="Automático (30 min)"
                   $invalid={!!errors.slotStep}
                 />
                 {errors.slotStep ? (
                   <ErrorText>{errors.slotStep}</ErrorText>
                 ) : (
                   <Hint>
-                    Dejá el campo vacío (o en 0) para que cada turno se ajuste a la
-                    duración del servicio.
+                    Cada cuántos minutos se ofrecen turnos al agendar. Dejá 0 para
+                    usar el intervalo del calendario (o 30 min si tampoco está
+                    definido).
                   </Hint>
                 )}
               </Field>
 
+              <Field>
+                <Label htmlFor="schedule-calendar-step">
+                  Intervalo del calendario (minutos)
+                </Label>
+                <Input
+                  id="schedule-calendar-step"
+                  name="calendarStep"
+                  type="number"
+                  min="5"
+                  max="240"
+                  value={values.calendarStep}
+                  onChange={handleChange}
+                  placeholder="30"
+                  $invalid={!!errors.calendarStep}
+                />
+                {errors.calendarStep ? (
+                  <ErrorText>{errors.calendarStep}</ErrorText>
+                ) : (
+                  <Hint>
+                    Tamaño de los bloques "Disponible" que se ven en el calendario
+                    (mín. 5, máx. 240).
+                  </Hint>
+                )}
+              </Field>
+            </Row>
+
+            <Row>
               <Field>
                 <Label htmlFor="schedule-days">Días a futuro</Label>
                 <Input
@@ -374,7 +429,7 @@ function Configuracion() {
                   name="daysAhead"
                   type="number"
                   min="1"
-                  max="6"
+                  max="90"
                   value={values.daysAhead}
                   onChange={handleChange}
                   $invalid={!!errors.daysAhead}
@@ -383,8 +438,34 @@ function Configuracion() {
                   <ErrorText>{errors.daysAhead}</ErrorText>
                 ) : (
                   <Hint>
-                    Días habilitados para agendar (mín. 1, máx. 6). Incluye el día
+                    Días habilitados para agendar (mín. 1, máx. 90). Incluye el día
                     de hoy.
+                  </Hint>
+                )}
+              </Field>
+
+              <Field>
+                <Label htmlFor="schedule-rest-day">Día de descanso</Label>
+                <Input
+                  as="select"
+                  id="schedule-rest-day"
+                  name="restDay"
+                  value={values.restDay}
+                  onChange={handleChange}
+                  $invalid={!!errors.restDay}
+                >
+                  {WEEKDAYS.map((day) => (
+                    <option key={day.value} value={day.value}>
+                      {day.label}
+                    </option>
+                  ))}
+                </Input>
+                {errors.restDay ? (
+                  <ErrorText>{errors.restDay}</ErrorText>
+                ) : (
+                  <Hint>
+                    Ese día se considera descanso: en el admin se puede agendar pero
+                    pide confirmación, y en la app de clientes no se ofrece.
                   </Hint>
                 )}
               </Field>

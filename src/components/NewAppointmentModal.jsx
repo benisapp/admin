@@ -15,11 +15,15 @@ import { Alert, Button, ErrorText, Field, Input, Label, SecondaryButton, Spinner
 import BarberIcon from './BarberIcon'
 import {
   APPOINTMENT_STATUS,
+  SLOT_TAKEN,
   createAppointment,
   getAppointmentsByDate,
   updateAppointment,
 } from '../appointments'
+import { normalizePhone } from '../clients'
 import NewClientModal from './NewClientModal'
+import ConfirmModal from './ConfirmModal'
+import { changeAppointmentStatus } from '../points'
 import { getSchedule } from '../settings'
 import { isServiceAvailable } from '../services'
 import {
@@ -28,11 +32,14 @@ import {
   getDefaultDiscount,
 } from '../discounts'
 import {
+  formatDateLong,
   formatDateString,
   formatTime12h,
   generateSlots,
-  isSunday,
+  isRestDay,
   overlaps,
+  roundUpToStep,
+  weekDayName,
 } from '../utils/dates'
 import { formatDuration, formatPrice } from '../utils/format'
 
@@ -600,6 +607,7 @@ function NewAppointmentModal({
     d.setHours(0, 0, 0, 0)
     return d
   }, [])
+  const [showRestDayConfirm, setShowSundayConfirm] = useState(false)
   const [schedule, setSchedule] = useState(null)
   const [date, setDate] = useState(() => appointment?.date || formatDateString(initialDate || new Date()))
   const [clientId, setClientId] = useState(() => appointment?.clientId || initialClientId || '')
@@ -626,6 +634,7 @@ function NewAppointmentModal({
   const [startTime, setStartTime] = useState(() => appointment?.startTime || initialTime || '')
   const [dateAppointments, setDateAppointments] = useState([])
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [slotsError, setSlotsError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [errors, setErrors] = useState({})
@@ -633,7 +642,7 @@ function NewAppointmentModal({
 
   const activeClients = clients
     .filter((c) => c.active !== false)
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   const activeServices = services.filter((s) => isServiceAvailable(s, date))
 
   const selectedServices = services.filter((s) => serviceIds.includes(s.id))
@@ -657,6 +666,7 @@ function NewAppointmentModal({
         price: Number(addon.price) || 0,
         duration: Number(addon.duration) || 0,
         points: Number(addon.points) || 0,
+        incremental: !!addon.incremental,
       })),
   )
 
@@ -712,14 +722,16 @@ function NewAppointmentModal({
     0,
   )
   const pointsToEarn = servicesPoints + addonsPoints
-  const { discountAmount, total } = applyDiscountToTotal(
-    subtotal,
+  // El descuento aplica solo sobre los servicios, nunca sobre los adicionales.
+  const { discountAmount } = applyDiscountToTotal(
+    servicesSubtotal,
     applicableDiscount,
   )
+  const total = subtotal - discountAmount
 
   const clientQueryTrim = clientQuery.trim().toLowerCase()
-  const clientQueryNormalized = normalizeText(clientQuery)
-  const clientQueryDigits = clientQueryNormalized.replace(/\D/g, '')
+  const clientQueryNormalized = normalizeText(clientQuery.trim())
+  const clientQueryDigits = normalizePhone(clientQuery)
   const shownClients = !clientQueryTrim
     ? []
     : activeClients
@@ -733,8 +745,9 @@ function NewAppointmentModal({
 
   useEffect(() => {
     const onKey = (event) => {
-      // Mientras el modal de nueva cliente está abierto, Escape lo maneja ese.
-      if (event.key === 'Escape' && !showNewClient) onClose()
+      // Mientras hay un modal encima (nueva cliente o confirmación de descanso),
+      // Escape lo maneja ese.
+      if (event.key === 'Escape' && !showNewClient && !showRestDayConfirm) onClose()
     }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
@@ -742,7 +755,7 @@ function NewAppointmentModal({
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
     }
-  }, [onClose, showNewClient])
+  }, [onClose, showNewClient, showRestDayConfirm])
 
   useEffect(() => {
     let cancelled = false
@@ -750,7 +763,10 @@ function NewAppointmentModal({
       .then((s) => {
         if (!cancelled) setSchedule(s)
       })
-      .catch((err) => console.error(err))
+      .catch((err) => {
+        console.error(err)
+        if (!cancelled) setSlotsError(true)
+      })
     return () => {
       cancelled = true
     }
@@ -758,12 +774,20 @@ function NewAppointmentModal({
 
   useEffect(() => {
     let cancelled = false
+    // eslint-disable-next-line react/set-state-in-effect
     setLoadingSlots(true)
+    setSlotsError(false)
     getAppointmentsByDate(date)
       .then((appts) => {
         if (!cancelled) setDateAppointments(appts)
       })
-      .catch((err) => console.error(err))
+      .catch((err) => {
+        console.error(err)
+        if (!cancelled) {
+          setDateAppointments([])
+          setSlotsError(true)
+        }
+      })
       .finally(() => {
         if (!cancelled) setLoadingSlots(false)
       })
@@ -785,10 +809,19 @@ function NewAppointmentModal({
 
   const slots = useMemo(() => {
     if (!totalDuration || !schedule) return []
-    const all = generateSlots(totalDuration, {
+    // Misma grilla que la app del cliente: paso por defecto de 30 min y la
+    // duración alineada a la grilla.
+    const step =
+      schedule.slotStep > 0
+        ? schedule.slotStep
+        : schedule.calendarStep > 0
+          ? schedule.calendarStep
+          : 30
+    const duration = roundUpToStep(totalDuration, step)
+    const all = generateSlots(duration, {
       open: schedule.openTime,
       close: schedule.closeTime,
-      step: schedule.slotStep || 0,
+      step,
     })
     const now = new Date()
     const todayStr = formatDateString(now)
@@ -906,8 +939,6 @@ function NewAppointmentModal({
       nextErrors.date = 'La fecha elegida no es válida.'
     } else if (isPastDate) {
       nextErrors.date = 'No podés agendar en una fecha pasada.'
-    } else if (isSunday(parsedDate)) {
-      nextErrors.date = 'Los domingos no hay atención.'
     } else if (unavailableServices.length > 0) {
       const names = unavailableServices.map((s) => s.name).join(', ')
       nextErrors.date = `Estos servicios no están disponibles en la fecha elegida: ${names}.`
@@ -921,10 +952,22 @@ function NewAppointmentModal({
     return Object.keys(nextErrors).length === 0
   }
 
-  const handleSubmit = async (event) => {
+  // El día de descanso configurado se puede agendar, pero se pide confirmación
+  // en un modal aparte antes de guardar.
+  const handleSubmit = (event) => {
     event.preventDefault()
     if (!validate()) return
 
+    const parsed = parseDate(date)
+    if (parsed && isRestDay(parsed, schedule?.restDay ?? 0)) {
+      setShowSundayConfirm(true)
+      return
+    }
+
+    performSave()
+  }
+
+  const performSave = async () => {
     setSaving(true)
     setSubmitError(null)
     try {
@@ -949,6 +992,15 @@ function NewAppointmentModal({
           discountTitle: applicableDiscount?.title || null,
           discountPercent: applicableDiscount?.percent ?? null,
         })
+        // Si la cita ya estaba asistida, recalcula sus puntos con los nuevos
+        // servicios/adicionales de forma atómica. Si cambió el cliente, revierte
+        // los puntos del cliente anterior.
+        await changeAppointmentStatus({
+          appointment,
+          services,
+          newStatus: appointment.status || APPOINTMENT_STATUS.CONFIRMED,
+          previousClientId: appointment.clientId,
+        })
         onEdited?.(date)
       } else {
         await createAppointment({
@@ -966,9 +1018,13 @@ function NewAppointmentModal({
       }
     } catch (err) {
       console.error(err)
-      setSubmitError(
-        isEditing ? 'No se pudo actualizar la cita.' : 'No se pudo agendar la cita.',
-      )
+      if (err?.code === SLOT_TAKEN) {
+        setSubmitError('Ese horario ya no está disponible. Elegí otro.')
+      } else {
+        setSubmitError(
+          isEditing ? 'No se pudo actualizar la cita.' : 'No se pudo agendar la cita.',
+        )
+      }
     } finally {
       setSaving(false)
     }
@@ -977,7 +1033,7 @@ function NewAppointmentModal({
   return (
     <>
     <Overlay onClick={onClose}>
-      <Dialog onClick={(e) => e.stopPropagation()}>
+      <Dialog role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Header>
           <Title>{isEditing ? 'Editar cita' : 'Nueva cita'}</Title>
           <CloseButton type="button" onClick={onClose} aria-label="Cerrar">
@@ -1195,7 +1251,12 @@ function NewAppointmentModal({
 
             <Field>
               <Label>Horario</Label>
-              {loadingSlots ? (
+              {slotsError ? (
+                <Alert tone="error">
+                  No se pudo cargar la disponibilidad. Cerrá el modal y volvé a
+                  intentar.
+                </Alert>
+              ) : loadingSlots ? (
                 <SlotLoading>
                   <Spinner />
                   Cargando horarios...
@@ -1326,6 +1387,22 @@ function NewAppointmentModal({
       <NewClientModal
         onCreated={handleClientCreated}
         onClose={() => setShowNewClient(false)}
+      />
+    )}
+
+    {showRestDayConfirm && (
+      <ConfirmModal
+        title="Agendar en día de descanso"
+        message={`El ${formatDateLong(date)} es ${weekDayName(schedule?.restDay ?? 0).toLowerCase()}, día de descanso. ¿Confirmás que querés agendar esta cita?`}
+        confirmLabel="Sí, agendar"
+        loadingLabel="Agendando..."
+        confirmVariant="primary"
+        loading={saving}
+        onConfirm={async () => {
+          await performSave()
+          setShowSundayConfirm(false)
+        }}
+        onClose={() => !saving && setShowSundayConfirm(false)}
       />
     )}
     </>

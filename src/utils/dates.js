@@ -16,23 +16,51 @@ function toDateString(date) {
   return `${y}-${m}-${d}`
 }
 
+export const WEEKDAYS = [
+  { value: 0, label: 'Domingo' },
+  { value: 1, label: 'Lunes' },
+  { value: 2, label: 'Martes' },
+  { value: 3, label: 'Miércoles' },
+  { value: 4, label: 'Jueves' },
+  { value: 5, label: 'Viernes' },
+  { value: 6, label: 'Sábado' },
+]
+
+export function weekDayName(value) {
+  return WEEKDAYS.find((day) => day.value === Number(value))?.label || ''
+}
+
+// Día de descanso configurable (0 = domingo, 1 = lunes, ... 6 = sábado).
+export function isRestDay(date, restDay = 0) {
+  return date.getDay() === Number(restDay)
+}
+
 export function isSunday(date) {
   return date.getDay() === 0
 }
 
-export function nextWorkingDays(count) {
+export function nextWorkingDays(count, restDay = 0) {
   const days = []
   const cursor = new Date()
   cursor.setHours(0, 0, 0, 0)
 
   while (days.length < count) {
-    if (!isSunday(cursor)) {
+    if (!isRestDay(cursor, restDay)) {
       days.push(new Date(cursor))
     }
     cursor.setDate(cursor.getDate() + 1)
   }
 
   return days
+}
+
+// Redondea la duración hacia arriba al múltiplo del paso (por defecto 30 min),
+// para que los bloques y horarios queden alineados a la grilla.
+export function roundUpToStep(minutes, step = 30) {
+  const size = Number(step) > 0 ? Number(step) : 30
+  const value = Number(minutes) || 0
+  if (value <= 0) return 0
+  return Math.ceil(value / size) * size
 }
 
 export function generateSlots(

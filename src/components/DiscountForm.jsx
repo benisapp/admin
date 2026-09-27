@@ -176,7 +176,9 @@ const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
 
 function parseMD(md) {
   if (!md || typeof md !== 'string') return { month: '', day: '' }
-  const parts = md.split('-')
+  // Admite tanto "MM-DD" como fechas completas "YYYY-MM-DD".
+  const value = md.length === 10 && md[4] === '-' ? md.slice(5) : md
+  const parts = value.split('-')
   if (parts.length !== 2) return { month: '', day: '' }
   const [month, day] = parts.map(Number)
   if (!month || !day) return { month: '', day: '' }
@@ -273,12 +275,10 @@ function DiscountForm({
         after > 365
       ) {
         nextErrors.birthdayDays = 'Los días después deben estar entre 0 y 365.'
-      } else if (before === 0 && after === 0) {
-        nextErrors.birthdayDays = 'Indicá al menos un día antes o después.'
       }
-    } else if (!fromMD && !toMDValue) {
-      nextErrors.range = 'Ingresá al menos una fecha (desde o hasta).'
+      // Con 0 y 0 el descuento aplica el día exacto del cumpleaños (válido).
     }
+    // Sin fechas, el descuento queda siempre activo (no es un error).
 
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
@@ -379,9 +379,9 @@ function DiscountForm({
                 )
               })}
             </ServiceGrid>
-            {errors.serviceIds && <ErrorText>{errors.serviceIds}</ErrorText>}
           </>
         )}
+        {errors.serviceIds && <ErrorText>{errors.serviceIds}</ErrorText>}
       </Field>
 
       {isBirthday && (
@@ -431,6 +431,9 @@ function DiscountForm({
       {!isBirthday && (
         <Field>
         <Label>Rango de fechas</Label>
+        <DateHint>
+          Opcional. Si dejás las fechas vacías, el descuento queda siempre activo.
+        </DateHint>
         <RangeRow>
           <div>
             <Label>Desde</Label>

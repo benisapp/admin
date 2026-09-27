@@ -139,17 +139,41 @@ const Actions = styled.div`
   border-top: 1px solid var(--color-border);
 `
 
+const ClearButton = styled.button`
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.25rem 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`
+
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
 
 function parseMD(md) {
   if (!md || typeof md !== 'string') return { month: '', day: '' }
-  const parts = md.split('-')
+  // Admite tanto "MM-DD" como fechas completas "YYYY-MM-DD".
+  const value = md.length === 10 && md[4] === '-' ? md.slice(5) : md
+  const parts = value.split('-')
   if (parts.length !== 2) return { month: '', day: '' }
   const [month, day] = parts.map(Number)
   if (!month || !day) return { month: '', day: '' }
   return { month, day }
 }
+
+const parseNum = (value) => (value === '' ? '' : Number(value))
 
 function toMD(month, day) {
   return `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -179,6 +203,20 @@ function ServiceRangeModal({ service, onSave, onClose }) {
 
   const fromMD = fromMonth && fromDay ? toMD(fromMonth, fromDay) : null
   const toMDValue = toMonth && toDay ? toMD(toMonth, toDay) : null
+  const hasRange = Boolean(service?.activeFrom || service?.activeUntil)
+
+  const handleClear = async () => {
+    setError('')
+    setSaving(true)
+    try {
+      await onSave({ activeFrom: null, activeUntil: null })
+      onClose()
+    } catch (err) {
+      console.error(err)
+      setError('No se pudo quitar el rango de fechas.')
+      setSaving(false)
+    }
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -202,7 +240,7 @@ function ServiceRangeModal({ service, onSave, onClose }) {
 
   return (
     <Overlay onClick={onClose}>
-      <Dialog onClick={(e) => e.stopPropagation()}>
+      <Dialog role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Header>
           <div>
             <Title>Activar por rango</Title>
@@ -226,7 +264,7 @@ function ServiceRangeModal({ service, onSave, onClose }) {
                 <GridRow>
                   <Select
                     value={fromMonth}
-                    onChange={(e) => setFromMonth(Number(e.target.value))}
+                    onChange={(e) => setFromMonth(parseNum(e.target.value))}
                     aria-label="Mes desde"
                   >
                     <option value="">Mes</option>
@@ -238,7 +276,7 @@ function ServiceRangeModal({ service, onSave, onClose }) {
                   </Select>
                   <Select
                     value={fromDay}
-                    onChange={(e) => setFromDay(Number(e.target.value))}
+                    onChange={(e) => setFromDay(parseNum(e.target.value))}
                     aria-label="Día desde"
                   >
                     <option value="">Día</option>
@@ -259,7 +297,7 @@ function ServiceRangeModal({ service, onSave, onClose }) {
                 <GridRow>
                   <Select
                     value={toMonth}
-                    onChange={(e) => setToMonth(Number(e.target.value))}
+                    onChange={(e) => setToMonth(parseNum(e.target.value))}
                     aria-label="Mes hasta"
                   >
                     <option value="">Mes</option>
@@ -271,7 +309,7 @@ function ServiceRangeModal({ service, onSave, onClose }) {
                   </Select>
                   <Select
                     value={toDay}
-                    onChange={(e) => setToDay(Number(e.target.value))}
+                    onChange={(e) => setToDay(parseNum(e.target.value))}
                     aria-label="Día hasta"
                   >
                     <option value="">Día</option>
@@ -287,6 +325,12 @@ function ServiceRangeModal({ service, onSave, onClose }) {
             </RangeRow>
 
             {error && <ErrorText>{error}</ErrorText>}
+
+            {hasRange && (
+              <ClearButton type="button" onClick={handleClear} disabled={saving}>
+                Quitar rango de fechas
+              </ClearButton>
+            )}
           </Body>
 
           <Actions>

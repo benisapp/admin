@@ -13,9 +13,22 @@ import {
 } from 'react-icons/fa6'
 import { APPOINTMENT_STATUS, getAppointmentsByClient } from '../appointments'
 import { STATUS_OPTIONS } from '../appointmentStatus'
+import { setClientActive } from '../clients'
 import { apptFullNames } from '../utils/appointmentServices'
 import { formatDateLong, formatTime12h, isSlotInPast } from '../utils/dates'
-import { Alert, Button, EmptyState, Spinner } from './ui'
+import {
+  Alert,
+  Button,
+  DangerButton,
+  EmptyState,
+  SecondaryButton,
+  Spinner,
+} from './ui'
+import NewClientModal from './NewClientModal'
+
+const Notice = styled.div`
+  margin-bottom: 1.25rem;
+`
 
 const STATUS_META = STATUS_OPTIONS.reduce(
   (map, option) => ({ ...map, [option.value]: option }),
@@ -98,7 +111,21 @@ const PointsBadge = styled.span`
 `
 
 const ActionsBar = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
   margin-bottom: 1.5rem;
+`
+
+const InactiveTag = styled.span`
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.625rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 `
 
 const SectionTitle = styled.h2`
@@ -245,14 +272,19 @@ function ClientFicha({
   backLabel,
   onBack,
   onNewAppointment,
+  onClientUpdated,
 }) {
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [retryToken, setRetryToken] = useState(0)
+  const [showEdit, setShowEdit] = useState(false)
+  const [togglingActive, setTogglingActive] = useState(false)
+  const [notice, setNotice] = useState(null)
 
   useEffect(() => {
     let cancelled = false
+    // eslint-disable-next-line react/set-state-in-effect
     setLoading(true)
     setLoadError(false)
     getAppointmentsByClient(client.id)
@@ -304,7 +336,29 @@ function ClientFicha({
     [appointments],
   )
 
-  const nextAppt = upcoming[0]
+  const handleToggleActive = async () => {
+    setTogglingActive(true)
+    setNotice(null)
+    try {
+      const nextActive = client.active === false
+      await setClientActive(client.id, nextActive)
+      setNotice({
+        tone: 'success',
+        text: nextActive
+          ? 'Cliente activada correctamente.'
+          : 'Cliente desactivada correctamente.',
+      })
+      onClientUpdated?.()
+    } catch (err) {
+      console.error(err)
+      setNotice({
+        tone: 'error',
+        text: 'No se pudo cambiar el estado de la cliente.',
+      })
+    } finally {
+      setTogglingActive(false)
+    }
+  }
 
   const renderBody = () => {
     if (loading) {
@@ -331,26 +385,26 @@ function ClientFicha({
 
     return (
       <>
-        <SectionTitle>Próxima cita</SectionTitle>
-        {nextAppt ? (
-          <NextCard>
-            <NextDate>{formatDateLong(nextAppt.date)}</NextDate>
-            <NextLine>
-              <FaClock size={13} />
-              {formatTime12h(nextAppt.startTime)} -{' '}
-              {formatTime12h(nextAppt.endTime)}
-            </NextLine>
-            <NextService>
-              {apptFullNames(nextAppt, serviceMap)}
-            </NextService>
-            <StatusLabel status={nextAppt.status} />
-          </NextCard>
-        ) : (
+        <SectionTitle>Próximas citas</SectionTitle>
+        {upcoming.length === 0 ? (
           <EmptyState
             icon={<FaCalendarCheck size={26} />}
             title="No hay próximas citas"
             description="Este cliente no tiene citas futuras agendadas."
           />
+        ) : (
+          upcoming.map((appt) => (
+            <NextCard key={appt.id}>
+              <NextDate>{formatDateLong(appt.date)}</NextDate>
+              <NextLine>
+                <FaClock size={13} />
+                {formatTime12h(appt.startTime)} -{' '}
+                {formatTime12h(appt.endTime)}
+              </NextLine>
+              <NextService>{apptFullNames(appt, serviceMap)}</NextService>
+              <StatusLabel status={appt.status} />
+            </NextCard>
+          ))
         )}
 
         <SectionTitle>Historial</SectionTitle>
@@ -397,6 +451,7 @@ function ClientFicha({
         </Avatar>
         <div>
           <ClientName>{client.name}</ClientName>
+          {client.active === false && <InactiveTag>Inactiva</InactiveTag>}
           {client.phone && (
             <ContactLine>
               <FaPhone size={12} />
@@ -422,9 +477,36 @@ function ClientFicha({
           <FaPlus size={14} />
           Nueva cita
         </Button>
+        <SecondaryButton type="button" onClick={() => setShowEdit(true)}>
+          Editar
+        </SecondaryButton>
+        <DangerButton
+          type="button"
+          onClick={handleToggleActive}
+          disabled={togglingActive}
+        >
+          {client.active === false ? 'Activar' : 'Desactivar'}
+        </DangerButton>
       </ActionsBar>
 
+      {notice && (
+        <Notice>
+          <Alert tone={notice.tone}>{notice.text}</Alert>
+        </Notice>
+      )}
+
       {renderBody()}
+
+      {showEdit && (
+        <NewClientModal
+          client={client}
+          onUpdated={() => {
+            setShowEdit(false)
+            onClientUpdated?.()
+          }}
+          onClose={() => setShowEdit(false)}
+        />
+      )}
     </div>
   )
 }

@@ -4,7 +4,6 @@ import {
   FaAngleLeft,
   FaAngleRight,
   FaCalendarDay,
-  FaCalendarDays,
   FaCircleCheck,
   FaPlus,
   FaTriangleExclamation,
@@ -19,8 +18,7 @@ import {
 } from 'react-icons/lu'
 import {
   APPOINTMENT_STATUS,
-  getAppointmentsByDate,
-  updateAppointmentStatus,
+  watchAppointmentsByDate,
 } from '../appointments'
 import { STATUS_OPTIONS } from '../appointmentStatus'
 import AppointmentStatusModal from './AppointmentStatusModal'
@@ -28,9 +26,9 @@ import CancelAppointmentModal from './CancelAppointmentModal'
 import { fetchClients } from '../clients'
 import { fetchServices } from '../services'
 import { fetchDiscounts } from '../discounts'
-import { syncAppointmentPoints } from '../points'
+import { changeAppointmentStatus } from '../points'
 import { getSchedule } from '../settings'
-import { formatDuration, formatPrice } from '../utils/format'
+import { formatDuration } from '../utils/format'
 import {
   apptTotalDuration,
   getAppointmentAddons,
@@ -44,12 +42,13 @@ import {
   addDays,
   formatDateString,
   formatTime12h,
+  isRestDay,
   isSameDay,
-  isSunday,
   overlaps,
   startOfWeek,
+  weekDayName,
 } from '../utils/dates'
-import { Alert, EmptyState, Spinner } from './ui'
+import { Alert, Spinner } from './ui'
 
 const STATUS_META = STATUS_OPTIONS.reduce(
   (map, option) => ({ ...map, [option.value]: option }),
@@ -603,6 +602,14 @@ const NoticeWrap = styled.div`
   }
 `
 
+const RestDayBanner = styled.div`
+  padding: 0.75rem 1.5rem 0;
+
+  @media (max-width: 767px) {
+    padding: 0.75rem 1rem 0;
+  }
+`
+
 const PickerWrap = styled.div`
   position: relative;
 `
@@ -852,7 +859,13 @@ function DayCalendar({ onOpenClient }) {
       .catch((err) => {
         console.error(err)
         if (!cancelled) {
-          setSchedule({ openTime: '09:00', closeTime: '19:00', slotStep: 0 })
+          setSchedule({
+            openTime: '09:00',
+            closeTime: '19:00',
+            slotStep: 0,
+            calendarStep: 30,
+            restDay: 0,
+          })
         }
       })
     return () => {
@@ -861,29 +874,24 @@ function DayCalendar({ onOpenClient }) {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-
-    const load = async () => {
-      setLoading(true)
-      setLoadError(false)
-      try {
-        const appts = await getAppointmentsByDate(dateKey)
-        if (cancelled) return
+    // eslint-disable-next-line react/set-state-in-effect
+    setLoading(true)
+    setLoadError(false)
+    return watchAppointmentsByDate(
+      dateKey,
+      (appts) => {
         setAppointments(
-          appts.sort((a, b) => a.startTime.localeCompare(b.startTime)),
+          [...appts].sort((a, b) => a.startTime.localeCompare(b.startTime)),
         )
-      } catch (err) {
+        setLoadError(false)
+        setLoading(false)
+      },
+      (err) => {
         console.error(err)
-        if (!cancelled) setLoadError(true)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    load()
-    return () => {
-      cancelled = true
-    }
+        setLoadError(true)
+        setLoading(false)
+      },
+    )
   }, [dateKey, reloadToken])
 
   const clientMap = useMemo(
@@ -899,7 +907,7 @@ function DayCalendar({ onOpenClient }) {
     if (!schedule) return []
     const open = schedule.openTime || '09:00'
     const close = schedule.closeTime || '19:00'
-    const step = schedule.slotStep > 0 ? schedule.slotStep : 60
+    const step = schedule.calendarStep > 0 ? schedule.calendarStep : 30
     const sorted = [...appointments]
       .filter((a) => a.status !== APPOINTMENT_STATUS.CANCELLED)
       .sort((a, b) => a.startTime.localeCompare(b.startTime))
@@ -942,10 +950,10 @@ function DayCalendar({ onOpenClient }) {
         (block) =>
           !cancelledEntries.some((c) =>
             overlaps(
-              block.startTime,
-              block.endTime,
+              block.start,
+              block.end,
               c.appt.startTime,
-              c.appt.endTime,
+              c.appt.endTime || c.appt.startTime,
             ),
           ),
       )
@@ -1017,24 +1025,23 @@ function DayCalendar({ onOpenClient }) {
   })()
 
   const handleStatusChange = async (appt, status) => {
-    const pointsAwarded = await syncAppointmentPoints({
+    const { pointsAwarded } = await changeAppointmentStatus({
       appointment: appt,
       services,
       newStatus: status,
     })
-    await updateAppointmentStatus(appt.id, status)
     setAppointments((prev) =>
       prev.map((a) => (a.id === appt.id ? { ...a, status, pointsAwarded } : a)),
     )
   }
 
   const handleCancelAppointment = async (appt) => {
-    const pointsAwarded = await syncAppointmentPoints({
+    const { pointsAwarded } = await changeAppointmentStatus({
       appointment: appt,
       services,
       newStatus: APPOINTMENT_STATUS.CANCELLED,
+      extra: { cancelledAt: new Date().toISOString() },
     })
-    await updateAppointmentStatus(appt.id, APPOINTMENT_STATUS.CANCELLED)
     setAppointments((prev) =>
       prev.map((a) =>
         a.id === appt.id
@@ -1099,7 +1106,8 @@ function DayCalendar({ onOpenClient }) {
   }
 
   const isToday = isSameDay(selectedDate, new Date())
-  const closed = isSunday(selectedDate)
+  const restDay = schedule?.restDay ?? 0
+  const isRestDaySelected = isRestDay(selectedDate, restDay)
 
   const renderAppointment = (appt, isLast) => {
     const client = clientMap[appt.clientId]
@@ -1159,16 +1167,18 @@ function DayCalendar({ onOpenClient }) {
               </DropdownButton>
               {openMenu?.apptId === appt.id && (
                 <Menu onMouseDown={(e) => e.stopPropagation()}>
-                  <MenuItem
-                    type="button"
-                    onClick={() => {
-                      setOpenMenu(null)
-                      setEditAppt(appt)
-                    }}
-                  >
-                    <LuPencil size={15} color="var(--color-primary)" />
-                    Editar
-                  </MenuItem>
+                  {!cancelled && (
+                    <MenuItem
+                      type="button"
+                      onClick={() => {
+                        setOpenMenu(null)
+                        setEditAppt(appt)
+                      }}
+                    >
+                      <LuPencil size={15} color="var(--color-primary)" />
+                      Editar
+                    </MenuItem>
+                  )}
                   <MenuItem
                     type="button"
                     onClick={() => {
@@ -1328,16 +1338,6 @@ function DayCalendar({ onOpenClient }) {
       )
     }
 
-    if (closed) {
-      return (
-        <EmptyState
-          icon={<FaCalendarDays size={26} />}
-          title="Cerrado"
-          description="Los domingos no hay atención."
-        />
-      )
-    }
-
     if (appointments.length === 0 && schedule == null) {
       return (
         <Loading>
@@ -1384,8 +1384,7 @@ function DayCalendar({ onOpenClient }) {
             <HeaderTitle>{isToday ? 'Citas de hoy' : 'Citas del día'}</HeaderTitle>
             <HeaderSub>
               {formatDateShort(dateKey)}
-              {!closed &&
-                ` · ${appointments.length} ${appointments.length === 1 ? 'cita' : 'citas'}`}
+              {` · ${appointments.length} ${appointments.length === 1 ? 'cita' : 'citas'}`}
             </HeaderSub>
           </HeaderText>
 
@@ -1429,7 +1428,7 @@ function DayCalendar({ onOpenClient }) {
                         const selected = isSameDay(day, selectedDate)
                         const today = isSameDay(day, new Date())
                         const isPast = day < todayStart
-                        const disabled = !inMonth || isSunday(day) || isPast
+                        const disabled = !inMonth || isPast
                         return (
                           <DayCell
                             key={day.getTime()}
@@ -1472,6 +1471,15 @@ function DayCalendar({ onOpenClient }) {
           </HeaderControls>
         </Header>
 
+        {isRestDaySelected && (
+          <RestDayBanner>
+            <Alert tone="info" icon={<FaTriangleExclamation size={16} />}>
+              {weekDayName(restDay)}: día de descanso. Podés agendar, pero confirmá la
+              cita antes de guardarla.
+            </Alert>
+          </RestDayBanner>
+        )}
+
         {renderBody()}
       </Card>
       {invoice && <InvoiceModal data={invoice} onClose={closeInvoice} />}
@@ -1493,6 +1501,10 @@ function DayCalendar({ onOpenClient }) {
           services={getAppointmentServices(statusAppt, serviceMap)}
           addons={getAppointmentAddons(statusAppt)}
           onSave={(status) => handleStatusChange(statusAppt, status)}
+          onEdit={() => {
+            setEditAppt(statusAppt)
+            setStatusAppt(null)
+          }}
           onCancel={() => {
             setCancelAppt(statusAppt)
             setStatusAppt(null)

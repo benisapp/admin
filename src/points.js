@@ -1,9 +1,15 @@
-import { doc, increment, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, increment, runTransaction } from 'firebase/firestore'
 import { db } from './firebase'
-import { APPOINTMENT_STATUS } from './appointments'
+import {
+  APPOINTMENT_STATUS,
+  applyIntervals,
+  ensureDayLock,
+} from './appointments'
 
 const CLIENTS_COLLECTION = 'clients'
 const APPOINTMENTS_COLLECTION = 'appointments'
+
+const ALLOWED_STATUSES = new Set(Object.values(APPOINTMENT_STATUS))
 
 export function getServicePoints(service) {
   const value = Number(service?.points)
@@ -27,29 +33,102 @@ export function getAppointmentPoints(appointment, services) {
   return servicesTotal + addonsTotal
 }
 
-// Acredita (o revierte) los puntos del cliente según el estado de la cita.
-// Se apoya en `pointsAwarded` para no contar dos veces la misma cita.
-export async function syncAppointmentPoints({ appointment, services, newStatus }) {
-  const current = Number(appointment?.pointsAwarded) || 0
-  if (!appointment?.id || !appointment?.clientId) return current
+// Puntos que le corresponden a una cita según el estado objetivo.
+export function getTargetPoints(appointment, services, status) {
+  return status === APPOINTMENT_STATUS.ATTENDED
+    ? getAppointmentPoints(appointment, services)
+    : 0
+}
 
-  const target =
-    newStatus === APPOINTMENT_STATUS.ATTENDED
-      ? getAppointmentPoints(appointment, services)
-      : 0
+// Actualiza estado y puntos de forma ATÓMICA. Relee la cita y el cliente dentro
+// de la transacción para no perder ni duplicar puntos. `extra` permite guardar
+// campos adicionales (por ejemplo cancelledAt) en la misma escritura.
+//
+// `previousClientId` se usa al editar una cita y cambiar de cliente: revierte
+// los puntos del cliente anterior y recalcula los del nuevo.
+export async function changeAppointmentStatus({
+  appointment,
+  services,
+  newStatus,
+  extra = {},
+  previousClientId,
+}) {
+  if (!appointment?.id) {
+    throw new Error('Cita inválida.')
+  }
+  if (!ALLOWED_STATUSES.has(newStatus)) {
+    throw new Error('Estado inválido.')
+  }
 
-  const delta = target - current
-  if (delta === 0) return current
+  const apptRef = doc(db, APPOINTMENTS_COLLECTION, appointment.id)
 
-  const now = new Date().toISOString()
-  await updateDoc(doc(db, APPOINTMENTS_COLLECTION, appointment.id), {
-    pointsAwarded: target,
-    updatedAt: now,
+  // Se lee primero (fuera de la transacción) para resolver cliente y fecha
+  // actuales; así no se acreditan puntos a un cliente/día desactualizado.
+  const snapshot = await getDoc(apptRef)
+  const current = snapshot.exists()
+    ? { id: snapshot.id, ...snapshot.data() }
+    : appointment
+  const clientId = current.clientId || appointment.clientId
+  if (!clientId) {
+    throw new Error('Cita inválida.')
+  }
+
+  const clientRef = doc(db, CLIENTS_COLLECTION, clientId)
+  const clientChanged = Boolean(previousClientId) && previousClientId !== clientId
+  const previousClientRef = clientChanged
+    ? doc(db, CLIENTS_COLLECTION, previousClientId)
+    : null
+  const lockRef = await ensureDayLock(current.date || appointment.date)
+
+  return runTransaction(db, async (transaction) => {
+    // Todas las lecturas primero.
+    const apptSnap = await transaction.get(apptRef)
+    const clientSnap = await transaction.get(clientRef)
+    const previousClientSnap = previousClientRef
+      ? await transaction.get(previousClientRef)
+      : null
+    const lockSnap = await transaction.get(lockRef)
+
+    const fresh = apptSnap.exists()
+      ? { id: apptSnap.id, ...apptSnap.data() }
+      : current
+
+    const target = getTargetPoints(fresh, services, newStatus)
+    const currentPoints = Number(fresh.pointsAwarded) || 0
+    // Si cambió el cliente, los puntos previos no eran de este cliente: se
+    // revierten del anterior y se acredita el total al nuevo.
+    const delta = clientChanged ? target : target - currentPoints
+    const now = new Date().toISOString()
+
+    transaction.update(apptRef, {
+      status: newStatus,
+      pointsAwarded: target,
+      updatedAt: now,
+      ...extra,
+    })
+
+    if (clientChanged && currentPoints !== 0 && previousClientSnap?.exists()) {
+      transaction.update(previousClientRef, {
+        points: increment(-currentPoints),
+        updatedAt: now,
+      })
+    }
+
+    if (delta !== 0 && clientSnap.exists()) {
+      transaction.update(clientRef, {
+        points: increment(delta),
+        updatedAt: now,
+      })
+    }
+
+    // Al cancelar, el horario vuelve a quedar libre.
+    if (newStatus === APPOINTMENT_STATUS.CANCELLED) {
+      const intervals = (
+        lockSnap.exists() ? lockSnap.data().intervals || [] : []
+      ).filter((interval) => interval.id !== appointment.id)
+      applyIntervals(transaction, lockRef, intervals, now)
+    }
+
+    return { status: newStatus, pointsAwarded: target }
   })
-  await updateDoc(doc(db, CLIENTS_COLLECTION, appointment.clientId), {
-    points: increment(delta),
-    updatedAt: now,
-  })
-
-  return target
 }

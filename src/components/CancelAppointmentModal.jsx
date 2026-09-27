@@ -147,7 +147,7 @@ function CancelAppointmentModal({
 
   return (
     <Overlay onClick={onClose}>
-      <Dialog onClick={(e) => e.stopPropagation()}>
+      <Dialog role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Header>
           <Title>¿Cancelar esta cita?</Title>
           <CloseButton type="button" onClick={onClose} aria-label="Cerrar">

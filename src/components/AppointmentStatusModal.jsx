@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react'
 import styled from 'styled-components'
-import { FaBan, FaCheck, FaClock, FaUser, FaXmark } from 'react-icons/fa6'
+import {
+  FaBan,
+  FaCheck,
+  FaClock,
+  FaPenToSquare,
+  FaTriangleExclamation,
+  FaUser,
+  FaXmark,
+} from 'react-icons/fa6'
 import { APPOINTMENT_STATUS } from '../appointments'
 import { STATUS_OPTIONS } from '../appointmentStatus'
 import { formatAddonNames, formatServiceNames } from '../utils/appointmentServices'
 import { formatTime12h } from '../utils/dates'
-import { Button, SecondaryButton } from './ui'
+import { Alert, Button, SecondaryButton } from './ui'
 
 const Overlay = styled.div`
   position: fixed;
@@ -182,17 +190,42 @@ const CancelAction = styled.button`
   }
 `
 
+const EditAction = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary);
+  }
+`
+
 function AppointmentStatusModal({
   appointment,
   client,
   services,
   addons = [],
   onSave,
+  onEdit,
   onCancel,
   onClose,
 }) {
   const [selected, setSelected] = useState(appointment.status)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const isCancelled = appointment.status === APPOINTMENT_STATUS.CANCELLED
 
   useEffect(() => {
     const onKey = (event) => {
@@ -207,23 +240,25 @@ function AppointmentStatusModal({
   }, [onClose])
 
   const handleSave = async () => {
-    if (selected === appointment.status) {
+    if (isCancelled || selected === appointment.status) {
       onClose()
       return
     }
     setSaving(true)
+    setError('')
     try {
       await onSave(selected)
       onClose()
     } catch (err) {
       console.error(err)
+      setError('No se pudo cambiar el estado. Intentalo de nuevo.')
       setSaving(false)
     }
   }
 
   return (
     <Overlay onClick={onClose}>
-      <Dialog onClick={(e) => e.stopPropagation()}>
+      <Dialog role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Header>
           <div>
             <Title>Cambiar estado</Title>
@@ -235,6 +270,16 @@ function AppointmentStatusModal({
         </Header>
 
         <Body>
+          {error && (
+            <Alert tone="error" icon={<FaTriangleExclamation size={16} />}>
+              {error}
+            </Alert>
+          )}
+          {isCancelled && (
+            <Alert tone="info" icon={<FaBan size={16} />}>
+              Esta cita está cancelada. Para reactivarla, creá una nueva cita.
+            </Alert>
+          )}
           <Summary>
             <SummaryName>{client ? client.name : 'Cliente'}</SummaryName>
             <SummaryLine>
@@ -255,11 +300,10 @@ function AppointmentStatusModal({
             </SummaryLine>
           </Summary>
 
+          {!isCancelled && (
           <Options>
             {STATUS_OPTIONS.filter(
-              (option) =>
-                option.value === APPOINTMENT_STATUS.ATTENDED ||
-                option.value === APPOINTMENT_STATUS.MISSED,
+              (option) => option.value !== APPOINTMENT_STATUS.CANCELLED,
             ).map((option) => {
               const isSelected = selected === option.value
               const OptionIcon = option.Icon
@@ -283,6 +327,17 @@ function AppointmentStatusModal({
               )
             })}
           </Options>
+          )}
+
+          {!isCancelled && onEdit && (
+            <>
+              <Divider />
+              <EditAction type="button" onClick={onEdit}>
+                <FaPenToSquare size={14} />
+                Editar cita
+              </EditAction>
+            </>
+          )}
 
           {appointment.status !== APPOINTMENT_STATUS.CANCELLED && onCancel && (
             <>
@@ -297,16 +352,18 @@ function AppointmentStatusModal({
 
         <Actions>
           <SecondaryButton type="button" onClick={onClose} style={{ flex: 1 }}>
-            Cancelar
+            {isCancelled ? 'Cerrar' : 'Cancelar'}
           </SecondaryButton>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            style={{ flex: 1 }}
-          >
-            Guardar
-          </Button>
+          {!isCancelled && (
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              style={{ flex: 1 }}
+            >
+              Guardar
+            </Button>
+          )}
         </Actions>
       </Dialog>
     </Overlay>

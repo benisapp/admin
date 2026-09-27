@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import styled from 'styled-components'
 import { FaXmark } from 'react-icons/fa6'
-import { DangerButton, SecondaryButton, Spinner } from './ui'
+import { Button, DangerButton, SecondaryButton, Spinner } from './ui'
 
 const Overlay = styled.div`
   position: fixed;
@@ -84,25 +84,30 @@ function ConfirmModal({
   title,
   message,
   confirmLabel = 'Confirmar',
+  loadingLabel = 'Procesando...',
+  confirmVariant = 'danger',
   loading = false,
   onConfirm,
   onClose,
 }) {
+  const ConfirmButton = confirmVariant === 'primary' ? Button : DangerButton
+
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'Escape') onClose()
     }
+    const previousOverflow = document.body.style.overflow
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
+      document.body.style.overflow = previousOverflow
     }
   }, [onClose])
 
   return (
     <Overlay onClick={onClose}>
-      <Dialog onClick={(e) => e.stopPropagation()}>
+      <Dialog role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <Header>
           <Title>{title}</Title>
           <CloseButton type="button" onClick={onClose} aria-label="Cerrar">
@@ -123,16 +128,16 @@ function ConfirmModal({
           >
             Cancelar
           </SecondaryButton>
-          <DangerButton type="button" onClick={onConfirm} disabled={loading} style={{ flex: 1 }}>
+          <ConfirmButton type="button" onClick={onConfirm} disabled={loading} style={{ flex: 1 }}>
             {loading ? (
               <>
-                <Spinner />
-                Desactivando...
+                <Spinner $light={confirmVariant === 'primary'} />
+                {loadingLabel}
               </>
             ) : (
               confirmLabel
             )}
-          </DangerButton>
+          </ConfirmButton>
         </Actions>
       </Dialog>
     </Overlay>

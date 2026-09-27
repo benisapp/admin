@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import { FaTriangleExclamation, FaUserPlus, FaXmark } from 'react-icons/fa6'
-import { createClient } from '../clients'
+import {
+  adjustClientPoints,
+  createClient,
+  normalizePhone,
+  updateClient,
+} from '../clients'
 import { formatDateString } from '../utils/dates'
 import {
   Alert,
@@ -13,6 +18,8 @@ import {
   SecondaryButton,
   Spinner,
 } from './ui'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const Overlay = styled.div`
   position: fixed;
@@ -112,11 +119,29 @@ const Hint = styled.p`
 
 const emptyValues = { name: '', phone: '', email: '', birthday: '' }
 
-function NewClientModal({ onCreated, onClose }) {
+function NewClientModal({ client = null, onCreated, onUpdated, onClose }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+  const isEditing = Boolean(client)
 
-  const [values, setValues] = useState(emptyValues)
+  const [values, setValues] = useState(() =>
+    client
+      ? {
+          name: client.name ?? '',
+          phone: client.phone ?? '',
+          email: client.email ?? '',
+          birthday: client.birthday ?? '',
+        }
+      : emptyValues,
+  )
+  const [points, setPoints] = useState(() =>
+    client ? String(Number(client.points) || 0) : '0',
+  )
+  // Valor de puntos al abrir el modal: el delta se calcula contra este y no
+  // contra un `client.points` que puede cambiar en tiempo real.
+  const [initialPoints] = useState(() =>
+    client ? Number(client.points) || 0 : 0,
+  )
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -125,8 +150,13 @@ function NewClientModal({ onCreated, onClose }) {
     const onKey = (event) => {
       if (event.key === 'Escape') onClose()
     }
+    const previousOverflow = document.body.style.overflow
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previousOverflow
+    }
   }, [onClose])
 
   const handleChange = (event) => {
@@ -138,7 +168,18 @@ function NewClientModal({ onCreated, onClose }) {
     const nextErrors = {}
 
     if (!values.name.trim()) nextErrors.name = 'El nombre es obligatorio.'
-    if (!values.phone.trim()) nextErrors.phone = 'El teléfono es obligatorio.'
+
+    const normalizedPhone = normalizePhone(values.phone)
+    if (!normalizedPhone) {
+      nextErrors.phone = 'El teléfono es obligatorio.'
+    } else if (normalizedPhone.length !== 10) {
+      nextErrors.phone = 'Ingresá un celular de 10 dígitos.'
+    }
+
+    const email = values.email.trim()
+    if (email && !EMAIL_RE.test(email)) {
+      nextErrors.email = 'Ingresá un correo electrónico válido.'
+    }
 
     if (values.birthday) {
       const [y, m, d] = values.birthday.split('-').map(Number)
@@ -147,6 +188,18 @@ function NewClientModal({ onCreated, onClose }) {
         nextErrors.birthday = 'Ingresá una fecha válida.'
       } else if (birth > today) {
         nextErrors.birthday = 'La fecha de cumpleaños no puede ser futura.'
+      }
+    }
+
+    if (isEditing) {
+      const parsedPoints = Number(points)
+      if (
+        points === '' ||
+        Number.isNaN(parsedPoints) ||
+        parsedPoints < 0 ||
+        !Number.isInteger(parsedPoints)
+      ) {
+        nextErrors.points = 'Ingresá un número entero mayor o igual a 0.'
       }
     }
 
@@ -161,13 +214,25 @@ function NewClientModal({ onCreated, onClose }) {
     setSaving(true)
     setSubmitError(null)
     try {
-      const client = await createClient({
-        name: values.name,
-        phone: values.phone,
-        email: values.email,
-        birthday: values.birthday || null,
-      })
-      onCreated(client)
+      if (isEditing) {
+        await updateClient(client.id, {
+          name: values.name,
+          phone: values.phone,
+          email: values.email,
+          birthday: values.birthday || null,
+        })
+        const delta = (Number(points) || 0) - initialPoints
+        await adjustClientPoints(client.id, delta)
+        onUpdated?.()
+      } else {
+        const created = await createClient({
+          name: values.name,
+          phone: values.phone,
+          email: values.email,
+          birthday: values.birthday || null,
+        })
+        onCreated(created)
+      }
     } catch (err) {
       console.error(err)
       if (err?.code === 'phone-exists') {
@@ -176,8 +241,12 @@ function NewClientModal({ onCreated, onClose }) {
             err.clientName ? `: ${err.clientName}` : ''
           }. Buscalo por nombre o celular para agendarle la cita.`,
         )
+      } else if (err?.code === 'invalid-phone') {
+        setSubmitError('Ingresá un celular de 10 dígitos.')
       } else {
-        setSubmitError('No se pudo crear la cliente.')
+        setSubmitError(
+          isEditing ? 'No se pudo actualizar la cliente.' : 'No se pudo crear la cliente.',
+        )
       }
       setSaving(false)
     }
@@ -190,9 +259,9 @@ function NewClientModal({ onCreated, onClose }) {
         onClose()
       }}
     >
-      <Dialog onClick={(event) => event.stopPropagation()}>
+      <Dialog role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
         <Header>
-          <Title>Nueva cliente</Title>
+          <Title>{isEditing ? 'Editar cliente' : 'Nueva cliente'}</Title>
           <CloseButton type="button" onClick={onClose} aria-label="Cerrar">
             <FaXmark size={16} />
           </CloseButton>
@@ -246,7 +315,9 @@ function NewClientModal({ onCreated, onClose }) {
                 value={values.email}
                 onChange={handleChange}
                 placeholder="correo@ejemplo.com"
+                $invalid={!!errors.email}
               />
+              {errors.email && <ErrorText>{errors.email}</ErrorText>}
             </Field>
 
             <Field>
@@ -265,6 +336,23 @@ function NewClientModal({ onCreated, onClose }) {
               {errors.birthday && <ErrorText>{errors.birthday}</ErrorText>}
               <Hint>Se usa para aplicar el descuento de cumpleaños.</Hint>
             </Field>
+
+            {isEditing && (
+              <Field>
+                <Label htmlFor="edit-client-points">Puntos</Label>
+                <Input
+                  id="edit-client-points"
+                  name="points"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={points}
+                  onChange={(e) => setPoints(e.target.value)}
+                  $invalid={!!errors.points}
+                />
+                {errors.points && <ErrorText>{errors.points}</ErrorText>}
+              </Field>
+            )}
           </Form>
         </Body>
 
@@ -286,12 +374,12 @@ function NewClientModal({ onCreated, onClose }) {
             {saving ? (
               <>
                 <Spinner $light />
-                Creando...
+                {isEditing ? 'Guardando...' : 'Creando...'}
               </>
             ) : (
               <>
                 <FaUserPlus size={15} />
-                Crear cliente
+                {isEditing ? 'Guardar cambios' : 'Crear cliente'}
               </>
             )}
           </Button>
