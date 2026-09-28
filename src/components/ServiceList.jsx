@@ -203,40 +203,16 @@ const PointsChip = styled.span`
   color: var(--color-warning, var(--color-info));
 `
 
-const AddonsRow = styled.div`
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-top: 0.5rem;
-`
-
-const AddonChip = styled.span`
+const AddonsChip = styled.span`
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.25rem;
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius-full);
-  border: 1px dashed var(--color-border-strong);
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--color-text-muted);
-`
-
-const AddonChipPrice = styled.span`
-  font-weight: 700;
+  background: var(--color-primary-soft);
   color: var(--color-primary);
-`
-
-const AddonChipUnit = styled.span`
-  padding: 0.05rem 0.35rem;
-  border-radius: var(--radius-full);
-  background: var(--color-info-soft);
-  color: var(--color-info);
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
 `
 
 const Actions = styled.div`
@@ -354,6 +330,13 @@ function ServiceList({
                   {Number(service.points)} pt{Number(service.points) === 1 ? '' : 's'}
                 </PointsChip>
               )}
+              {Array.isArray(service.addons) && service.addons.length > 0 && (
+                <AddonsChip title="Tiene adicionales (gestioná desde el botón Adicionales)">
+                  <FaListCheck size={12} />
+                  {service.addons.length} adicional
+                  {service.addons.length === 1 ? '' : 'es'}
+                </AddonsChip>
+              )}
               {!service.active && (service.activeFrom || service.activeUntil) && (
                 <RangeChip>
                   <FaCalendarDays size={12} />
@@ -362,20 +345,6 @@ function ServiceList({
                 </RangeChip>
               )}
             </Meta>
-            {Array.isArray(service.addons) && service.addons.length > 0 && (
-              <AddonsRow>
-                {service.addons.map((addon) => (
-                  <AddonChip key={addon.id}>
-                    {addon.icon && <BarberIcon id={addon.icon} size={12} />}
-                    {addon.name}
-                    {typeof addon.price === 'number' && addon.price > 0 && (
-                      <AddonChipPrice>+{formatPrice(addon.price)}</AddonChipPrice>
-                    )}
-                    {addon.incremental && <AddonChipUnit>por uña</AddonChipUnit>}
-                  </AddonChip>
-                ))}
-              </AddonsRow>
-            )}
           </Info>
 
           <Actions>
