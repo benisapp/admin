@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import styled, { keyframes } from 'styled-components'
+import styled, { css, keyframes } from 'styled-components'
 import {
   FaCalendarDays,
   FaClock,
@@ -55,9 +55,9 @@ const Item = styled.li`
 
   ${({ $flash }) =>
     $flash &&
-    `
-    animation: ${hideFlash} 0.5s ease;
-  `}
+    css`
+      animation: ${hideFlash} 0.5s ease;
+    `}
 
   @media (max-width: 767px) {
     flex-wrap: wrap;
