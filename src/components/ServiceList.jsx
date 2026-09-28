@@ -22,12 +22,6 @@ const hideFlash = keyframes`
   100% { opacity: 1; transform: scale(1); }
 `
 
-const chipPop = keyframes`
-  0% { opacity: 0; transform: scale(0.5); }
-  60% { transform: scale(1.12); }
-  100% { opacity: 1; transform: scale(1); }
-`
-
 const List = styled.ul`
   list-style: none;
   margin: 0;
@@ -178,19 +172,6 @@ const RangeChip = styled.span`
   color: var(--color-info);
 `
 
-const AdminOnlyChip = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: var(--color-warning-soft, var(--color-info-soft));
-  color: var(--color-warning, var(--color-info));
-  animation: ${chipPop} 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
-`
-
 const PointsChip = styled.span`
   display: inline-flex;
   align-items: center;
@@ -309,12 +290,6 @@ function ServiceList({
               <Badge $active={service.active}>
                 {service.active ? 'Activo' : 'Inactivo'}
               </Badge>
-              {service.adminOnly && (
-                <AdminOnlyChip>
-                  <FaEyeSlash size={11} />
-                  Solo admin
-                </AdminOnlyChip>
-              )}
             </NameRow>
             <Meta>
               <Chip>
@@ -405,14 +380,14 @@ function ServiceList({
       <Section>
         <SectionTitle $adminOnly>
           <FaEyeSlash size={13} />
-          Solo admin
+          Admin
           <SectionCount>{adminServices.length}</SectionCount>
         </SectionTitle>
         {adminServices.length > 0 ? (
           <List>{adminServices.map(renderService)}</List>
         ) : (
           <SectionEmpty>
-            No hay servicios de solo admin en esta pestaña.
+            No hay servicios de admin en esta pestaña.
           </SectionEmpty>
         )}
       </Section>
