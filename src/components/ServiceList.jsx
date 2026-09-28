@@ -394,14 +394,14 @@ function ServiceList({
 
       <Section>
         <SectionTitle>
-          Para clientas
+          Clientes
           <SectionCount>{clientServices.length}</SectionCount>
         </SectionTitle>
         {clientServices.length > 0 ? (
           <List>{clientServices.map(renderService)}</List>
         ) : (
           <SectionEmpty>
-            No hay servicios para clientas en esta pestaña.
+            No hay servicios para clientes en esta pestaña.
           </SectionEmpty>
         )}
       </Section>
