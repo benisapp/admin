@@ -22,6 +22,12 @@ const hideFlash = keyframes`
   100% { opacity: 1; transform: scale(1); }
 `
 
+const showFlash = keyframes`
+  0% { box-shadow: 0 0 0 0 var(--color-success-soft); transform: scale(1); }
+  50% { box-shadow: 0 0 0 3px var(--color-success-soft); transform: scale(1.012); }
+  100% { box-shadow: var(--shadow-sm); transform: scale(1); }
+`
+
 const List = styled.ul`
   list-style: none;
   margin: 0;
@@ -86,10 +92,10 @@ const Item = styled.li`
     border-color: var(--color-border-strong);
   }
 
-  ${({ $flash }) =>
+  ${({ $flash, $flashAction }) =>
     $flash &&
     css`
-      animation: ${hideFlash} 0.5s ease;
+      animation: ${$flashAction === 'show' ? showFlash : hideFlash} 0.5s ease;
     `}
 
   @media (max-width: 767px) {
@@ -217,23 +223,21 @@ function ServiceList({
   onManageAddons,
   onCreate,
 }) {
-  const [pulseId, setPulseId] = useState(null)
-  const pulseTimer = useRef(null)
+  const [flash, setFlash] = useState(null)
+  const flashTimer = useRef(null)
 
   useEffect(
     () => () => {
-      if (pulseTimer.current) clearTimeout(pulseTimer.current)
+      if (flashTimer.current) clearTimeout(flashTimer.current)
     },
     [],
   )
 
   const handleToggleAdminOnly = (service) => {
-    // Se anima solo al ocultar (cuando pasa a ser "solo admin").
-    if (!service.adminOnly) {
-      setPulseId(service.id)
-      if (pulseTimer.current) clearTimeout(pulseTimer.current)
-      pulseTimer.current = setTimeout(() => setPulseId(null), 520)
-    }
+    // Animación distinta según se oculte o se vuelva a mostrar a las clientas.
+    setFlash({ id: service.id, action: service.adminOnly ? 'show' : 'hide' })
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setFlash(null), 520)
     onToggleAdminOnly(service)
   }
 
@@ -277,7 +281,11 @@ function ServiceList({
   const clientServices = services.filter((service) => !service.adminOnly)
 
   const renderService = (service) => (
-    <Item key={service.id} $flash={pulseId === service.id}>
+    <Item
+      key={service.id}
+      $flash={flash?.id === service.id}
+      $flashAction={flash?.id === service.id ? flash.action : null}
+    >
           {service.icon && (
             <Icon>
               <BarberIcon id={service.icon} size={22} />
