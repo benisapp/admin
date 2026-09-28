@@ -37,6 +37,45 @@ const List = styled.ul`
   gap: 0.75rem;
 `
 
+const Sections = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+`
+
+const Section = styled.section`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+`
+
+const SectionTitle = styled.h3`
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: ${({ $adminOnly }) =>
+    $adminOnly ? 'var(--color-warning, var(--color-info))' : 'var(--color-text)'};
+`
+
+const SectionCount = styled.span`
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+`
+
+const SectionEmpty = styled.p`
+  margin: 0;
+  padding: 0.25rem 0.125rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+`
+
 const Item = styled.li`
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -277,10 +316,11 @@ function ServiceList({
     )
   }
 
-  return (
-    <List>
-      {services.map((service) => (
-        <Item key={service.id} $flash={pulseId === service.id}>
+  const adminServices = services.filter((service) => service.adminOnly)
+  const clientServices = services.filter((service) => !service.adminOnly)
+
+  const renderService = (service) => (
+    <Item key={service.id} $flash={pulseId === service.id}>
           {service.icon && (
             <Icon>
               <BarberIcon id={service.icon} size={22} />
@@ -388,9 +428,40 @@ function ServiceList({
               <FaPowerOff size={15} />
             </IconButton>
           </Actions>
-        </Item>
-      ))}
-    </List>
+    </Item>
+  )
+
+  return (
+    <Sections>
+      <Section>
+        <SectionTitle $adminOnly>
+          <FaEyeSlash size={13} />
+          Solo admin
+          <SectionCount>{adminServices.length}</SectionCount>
+        </SectionTitle>
+        {adminServices.length > 0 ? (
+          <List>{adminServices.map(renderService)}</List>
+        ) : (
+          <SectionEmpty>
+            No hay servicios de solo admin en esta pestaña.
+          </SectionEmpty>
+        )}
+      </Section>
+
+      <Section>
+        <SectionTitle>
+          Para clientas
+          <SectionCount>{clientServices.length}</SectionCount>
+        </SectionTitle>
+        {clientServices.length > 0 ? (
+          <List>{clientServices.map(renderService)}</List>
+        ) : (
+          <SectionEmpty>
+            No hay servicios para clientas en esta pestaña.
+          </SectionEmpty>
+        )}
+      </Section>
+    </Sections>
   )
 }
 
