@@ -48,7 +48,9 @@ export async function createService({ name, duration, price, points, icon, addon
     points: Number(points) || 0,
     icon,
     addons: normalizeAddons(addons),
-    adminOnly: !!adminOnly,
+    // Por defecto el servicio se muestra a las clientas (false) salvo que se
+    // marque explícitamente el check de "solo admin".
+    adminOnly: adminOnly === true,
     active: true,
     createdAt: now,
     updatedAt: now,
@@ -62,7 +64,7 @@ export async function updateService(id, { name, duration, price, points, icon, a
     price,
     points: Number(points) || 0,
     icon,
-    adminOnly: !!adminOnly,
+    ...(adminOnly !== undefined ? { adminOnly: adminOnly === true } : {}),
     ...(addons !== undefined ? { addons: normalizeAddons(addons) } : {}),
     updatedAt: new Date().toISOString(),
   })
