@@ -1,4 +1,5 @@
-import styled from 'styled-components'
+import { useEffect, useRef, useState } from 'react'
+import styled, { keyframes } from 'styled-components'
 import {
   FaCalendarDays,
   FaClock,
@@ -14,6 +15,18 @@ import {
 import { formatDuration, formatMonthDay, formatPrice } from '../utils/format'
 import BarberIcon from './BarberIcon'
 import { Badge, Button, EmptyState, IconButton } from './ui'
+
+const hideFlash = keyframes`
+  0% { opacity: 1; transform: scale(1); }
+  40% { opacity: 0.5; transform: scale(0.985); }
+  100% { opacity: 1; transform: scale(1); }
+`
+
+const chipPop = keyframes`
+  0% { opacity: 0; transform: scale(0.5); }
+  60% { transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+`
 
 const List = styled.ul`
   list-style: none;
@@ -39,6 +52,12 @@ const Item = styled.li`
     box-shadow: var(--shadow-md);
     border-color: var(--color-border-strong);
   }
+
+  ${({ $flash }) =>
+    $flash &&
+    `
+    animation: ${hideFlash} 0.5s ease;
+  `}
 
   @media (max-width: 767px) {
     flex-wrap: wrap;
@@ -130,6 +149,7 @@ const AdminOnlyChip = styled.span`
   font-weight: 600;
   background: var(--color-warning-soft, var(--color-info-soft));
   color: var(--color-warning, var(--color-info));
+  animation: ${chipPop} 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 `
 
 const PointsChip = styled.span`
@@ -201,6 +221,26 @@ function ServiceList({
   onManageAddons,
   onCreate,
 }) {
+  const [pulseId, setPulseId] = useState(null)
+  const pulseTimer = useRef(null)
+
+  useEffect(
+    () => () => {
+      if (pulseTimer.current) clearTimeout(pulseTimer.current)
+    },
+    [],
+  )
+
+  const handleToggleAdminOnly = (service) => {
+    // Se anima solo al ocultar (cuando pasa a ser "solo admin").
+    if (!service.adminOnly) {
+      setPulseId(service.id)
+      if (pulseTimer.current) clearTimeout(pulseTimer.current)
+      pulseTimer.current = setTimeout(() => setPulseId(null), 520)
+    }
+    onToggleAdminOnly(service)
+  }
+
   if (services.length === 0) {
     if (tab === 'inactive') {
       return (
@@ -240,7 +280,7 @@ function ServiceList({
   return (
     <List>
       {services.map((service) => (
-        <Item key={service.id}>
+        <Item key={service.id} $flash={pulseId === service.id}>
           {service.icon && (
             <Icon>
               <BarberIcon id={service.icon} size={22} />
@@ -323,7 +363,7 @@ function ServiceList({
               aria-label={
                 service.adminOnly ? 'Mostrar a clientas' : 'Ocultar a clientas'
               }
-              onClick={() => onToggleAdminOnly(service)}
+              onClick={() => handleToggleAdminOnly(service)}
             >
               {service.adminOnly ? <FaEye size={15} /> : <FaEyeSlash size={15} />}
             </IconButton>
