@@ -262,7 +262,7 @@ function AppointmentStatusModal({
         <Header>
           <div>
             <Title>Cambiar estado</Title>
-            <Subtitle>{client?.name || 'Cliente'}</Subtitle>
+            <Subtitle>{client?.name || appointment.clientName || 'Cliente'}</Subtitle>
           </div>
           <CloseButton type="button" onClick={onClose} aria-label="Cerrar">
             <FaXmark size={16} />
@@ -281,7 +281,9 @@ function AppointmentStatusModal({
             </Alert>
           )}
           <Summary>
-            <SummaryName>{client ? client.name : 'Cliente'}</SummaryName>
+            <SummaryName>
+              {client?.name || appointment.clientName || 'Cliente'}
+            </SummaryName>
             <SummaryLine>
               <FaUser size={12} />
               {formatServiceNames(services)}

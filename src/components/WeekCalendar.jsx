@@ -556,7 +556,9 @@ function WeekCalendar() {
                           <ApptTime>{formatTime12h(appt.startTime)}</ApptTime>
                           {StatusIcon && <StatusIcon size={10} />}
                         </ApptTimeRow>
-                        <ApptName>{client ? client.name : 'Cliente'}</ApptName>
+                        <ApptName>
+                          {client?.name || appt.clientName || 'Ocasional'}
+                        </ApptName>
                         <ApptService>
                           {apptFullNames(appt, serviceMap)}
                         </ApptService>

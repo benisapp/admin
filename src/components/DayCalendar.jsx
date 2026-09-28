@@ -1111,6 +1111,7 @@ function DayCalendar({ onOpenClient }) {
 
   const renderAppointment = (appt, isLast) => {
     const client = clientMap[appt.clientId]
+    const contactPhone = client?.phone || appt.clientPhone || ''
     const statusMeta = STATUS_META[appt.status]
     const StatusIcon = statusMeta?.Icon
     const apptServices = getAppointmentServices(appt, serviceMap)
@@ -1139,7 +1140,7 @@ function DayCalendar({ onOpenClient }) {
                 {client.name}
               </NameButton>
             ) : (
-              <Name>Cliente</Name>
+              <Name>{appt.clientName || 'Ocasional'}</Name>
             )}
             <StatusBadge
               type="button"
@@ -1189,13 +1190,13 @@ function DayCalendar({ onOpenClient }) {
                     <LuReceipt size={15} color="var(--color-gold-ink)" />
                     Ver factura
                   </MenuItem>
-                  {(client?.phone || client?.email) && (
+                  {(contactPhone || client?.email) && (
                     <>
                       <MenuDivider />
-                      {client?.phone && (
+                      {contactPhone && (
                         <>
                           <MenuLink
-                            href={`https://wa.me/57${client.phone}`}
+                            href={`https://wa.me/57${contactPhone}`}
                             target="_blank"
                             rel="noreferrer"
                             onClick={() => setOpenMenu(null)}
@@ -1204,7 +1205,7 @@ function DayCalendar({ onOpenClient }) {
                             WhatsApp
                           </MenuLink>
                           <MenuLink
-                            href={`tel:+57${client.phone}`}
+                            href={`tel:+57${contactPhone}`}
                             onClick={() => setOpenMenu(null)}
                           >
                             <LuPhone size={15} color="var(--color-primary-strong)" />
@@ -1277,10 +1278,10 @@ function DayCalendar({ onOpenClient }) {
             ) : null}
           </ServiceList>
 
-          {client?.phone && (
+          {contactPhone && (
             <PhoneLine>
               <LuPhone size={11} />
-              {formatPhone(client.phone)}
+              {formatPhone(contactPhone)}
             </PhoneLine>
           )}
         </Content>

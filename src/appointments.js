@@ -166,6 +166,8 @@ export async function updateAppointment(
   id,
   {
     clientId,
+    clientName,
+    clientPhone,
     serviceIds,
     addons,
     date,
@@ -198,7 +200,9 @@ export async function updateAppointment(
     newIntervals.push({ id, startTime, endTime })
 
     transaction.update(apptRef, {
-      clientId,
+      clientId: clientId || null,
+      clientName: clientName?.trim() || null,
+      clientPhone: clientPhone || null,
       serviceIds,
       addons: toAddons(addons),
       date,
@@ -222,6 +226,8 @@ export async function updateAppointment(
 
 export async function createAppointment({
   clientId,
+  clientName,
+  clientPhone,
   serviceIds,
   addons,
   date,
@@ -236,7 +242,9 @@ export async function createAppointment({
 
   const ref = doc(collection(db, APPOINTMENTS_COLLECTION))
   const data = {
-    clientId,
+    clientId: clientId || null,
+    clientName: clientName?.trim() || null,
+    clientPhone: clientPhone || null,
     serviceIds,
     addons: addonList,
     date,

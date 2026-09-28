@@ -163,7 +163,9 @@ function CancelAppointmentModal({
           )}
 
           <Summary>
-            <SummaryName>{client ? client.name : 'Cliente'}</SummaryName>
+            <SummaryName>
+              {client?.name || appointment.clientName || 'Cliente'}
+            </SummaryName>
             <SummaryLine>
               <FaUser size={12} />
               {formatServiceNames(services)}

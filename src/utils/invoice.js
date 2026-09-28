@@ -30,8 +30,10 @@ export function buildInvoiceData({ client, items, discount }) {
   const list = items?.length ? items : []
   const firstAppt = list[0]?.appointment
   const code = getTicketCode(firstAppt) || '—'
-  const clientName = client?.name || 'Cliente'
-  const contact = [client?.phone, client?.email].filter(Boolean).join(' · ')
+  const clientName = client?.name || firstAppt?.clientName || 'Cliente'
+  const contact = [client?.phone || firstAppt?.clientPhone, client?.email]
+    .filter(Boolean)
+    .join(' · ')
   const date = firstAppt?.date ? formatDateLong(firstAppt.date) : '—'
   const addons = Array.isArray(firstAppt?.addons)
     ? firstAppt.addons.filter(Boolean)

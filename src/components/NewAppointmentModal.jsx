@@ -447,6 +447,66 @@ const ClearClientButton = styled.button`
   }
 `
 
+const ModeToggle = styled.div`
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin-bottom: 0.625rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+`
+
+const ModeButton = styled.button`
+  border: none;
+  border-radius: var(--radius-sm);
+  background: ${({ $active }) =>
+    $active ? 'var(--color-primary)' : 'transparent'};
+  color: ${({ $active }) =>
+    $active ? 'var(--color-on-primary)' : 'var(--color-text-muted)'};
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+
+  &:hover {
+    color: ${({ $active }) =>
+      $active ? 'var(--color-on-primary)' : 'var(--color-text)'};
+  }
+`
+
+const OccasionalWrap = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`
+
+const PhoneMatch = styled.div`
+  margin-top: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--color-warning, var(--color-border-strong));
+  background: var(--color-warning-soft, var(--color-bg));
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+`
+
+const PhoneMatchText = styled.p`
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.85rem;
+  color: var(--color-text);
+`
+
+const PhoneMatchActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+`
+
 const SlotGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(6.25rem, 1fr));
@@ -612,6 +672,17 @@ function NewAppointmentModal({
   const [date, setDate] = useState(() => appointment?.date || formatDateString(initialDate || new Date()))
   const [clientId, setClientId] = useState(() => appointment?.clientId || initialClientId || '')
   const [clientQuery, setClientQuery] = useState('')
+  // Modo de la cita: con clienta registrada o clienta ocasional (sin registro).
+  const [clientMode, setClientMode] = useState(() =>
+    appointment && !appointment.clientId ? 'occasional' : 'registered',
+  )
+  const [occasionalName, setOccasionalName] = useState(
+    () => appointment?.clientName || '',
+  )
+  const [occasionalPhone, setOccasionalPhone] = useState(
+    () => appointment?.clientPhone || '',
+  )
+  const [dismissedPhoneMatch, setDismissedPhoneMatch] = useState(null)
   const [showNewClient, setShowNewClient] = useState(false)
   const [createdClient, setCreatedClient] = useState(null)
   const [clientListOpen, setClientListOpen] = useState(false)
@@ -695,6 +766,16 @@ function NewAppointmentModal({
   const selectedClient =
     clients.find((c) => c.id === clientId) ||
     (createdClient?.id === clientId ? createdClient : null)
+
+  // Si en modo ocasional el celular ya pertenece a una clienta registrada,
+  // se ofrece usarla o continuar como ocasional.
+  const occasionalPhoneDigits = normalizePhone(occasionalPhone)
+  const occasionalMatch =
+    occasionalPhoneDigits.length === 10
+      ? clients.find(
+          (c) => normalizePhone(c.phone || '') === occasionalPhoneDigits,
+        ) || null
+      : null
   const applicableDiscounts = getApplicableDiscounts(
     date,
     serviceIds,
@@ -906,6 +987,38 @@ function NewAppointmentModal({
     setClientListOpen(false)
   }
 
+  const switchClientMode = (mode) => {
+    setClientMode(mode)
+    setErrors((prev) => ({ ...prev, clientId: undefined }))
+    setDismissedPhoneMatch(null)
+    if (mode === 'occasional') {
+      const source = selectedClient || createdClient
+      if (!occasionalName && source?.name) setOccasionalName(source.name)
+      // Ocasional no lleva clienta registrada: limpiamos la selección para que
+      // la detección por celular vuelva a funcionar.
+      setClientId('')
+      setClientQuery('')
+      setClientListOpen(false)
+    }
+  }
+
+  // Usar una clienta ya registrada que coincidió por celular.
+  const handleUseExistingClient = (match) => {
+    setClientMode('registered')
+    setClientId(match.id)
+    setClientQuery('')
+    setClientListOpen(false)
+    setOccasionalName('')
+    setOccasionalPhone('')
+    setDismissedPhoneMatch(null)
+    setErrors((prev) => ({ ...prev, clientId: undefined }))
+  }
+
+  // Continuar como ocasional ignorando la coincidencia.
+  const handleKeepOccasional = (match) => {
+    setDismissedPhoneMatch(match.id)
+  }
+
   const openNewClient = () => {
     setShowNewClient(true)
   }
@@ -925,7 +1038,7 @@ function NewAppointmentModal({
     const parsedDate = parseDate(date)
     const isPastDate = !!date && date < todayStr && date !== appointment?.date
 
-    if (!clientId) {
+    if (clientMode === 'registered' && !clientId) {
       nextErrors.clientId = 'Elegí una cliente.'
     }
 
@@ -971,7 +1084,12 @@ function NewAppointmentModal({
     setSaving(true)
     setSubmitError(null)
     try {
-      const resolvedClientId = clientId
+      const isOccasional = clientMode === 'occasional'
+      const resolvedClientId = isOccasional ? null : clientId
+      const resolvedClientName = isOccasional ? occasionalName.trim() : null
+      const resolvedClientPhone = isOccasional
+        ? normalizePhone(occasionalPhone) || null
+        : null
 
       const slot = slots.find((s) => s.startTime === startTime)
       if (!slot) {
@@ -983,6 +1101,8 @@ function NewAppointmentModal({
       if (isEditing) {
         await updateAppointment(appointment.id, {
           clientId: resolvedClientId,
+          clientName: resolvedClientName,
+          clientPhone: resolvedClientPhone,
           serviceIds,
           addons: acceptedAddons,
           date,
@@ -999,12 +1119,14 @@ function NewAppointmentModal({
           appointment,
           services,
           newStatus: appointment.status || APPOINTMENT_STATUS.CONFIRMED,
-          previousClientId: appointment.clientId,
+          previousClientId: appointment.clientId || undefined,
         })
         onEdited?.(date)
       } else {
         await createAppointment({
           clientId: resolvedClientId,
+          clientName: resolvedClientName,
+          clientPhone: resolvedClientPhone,
           serviceIds,
           addons: acceptedAddons,
           date,
@@ -1046,7 +1168,76 @@ function NewAppointmentModal({
             <Field>
               <Label htmlFor="appt-client">Cliente</Label>
 
-              {selectedClient ? (
+              <ModeToggle>
+                <ModeButton
+                  type="button"
+                  $active={clientMode === 'registered'}
+                  onClick={() => switchClientMode('registered')}
+                >
+                  Registrada
+                </ModeButton>
+                <ModeButton
+                  type="button"
+                  $active={clientMode === 'occasional'}
+                  onClick={() => switchClientMode('occasional')}
+                  title="Clienta sin registro (ocasional)"
+                >
+                  Ocasional
+                </ModeButton>
+              </ModeToggle>
+
+              {clientMode === 'occasional' ? (
+                <OccasionalWrap>
+                  <Input
+                    id="appt-client"
+                    value={occasionalName}
+                    onChange={(e) => setOccasionalName(e.target.value)}
+                    placeholder="Nombre (opcional)"
+                    $invalid={!!errors.clientId}
+                  />
+                  <Input
+                    value={occasionalPhone}
+                    onChange={(e) => {
+                      setOccasionalPhone(e.target.value)
+                      setDismissedPhoneMatch(null)
+                    }}
+                    placeholder="Celular (opcional)"
+                    inputMode="tel"
+                  />
+                  <Hint>
+                    Cita sin registrar: el nombre y el celular son opcionales. No
+                    suma puntos ni aparece en la ficha de clientas.
+                  </Hint>
+
+                  {occasionalMatch &&
+                    occasionalMatch.id !== clientId &&
+                    dismissedPhoneMatch !== occasionalMatch.id && (
+                    <PhoneMatch>
+                      <PhoneMatchText>
+                        <FaUser size={13} />
+                        <span>
+                          Ese número ya está registrado con{' '}
+                          <strong>{occasionalMatch.name || 'una clienta'}</strong>.
+                        </span>
+                      </PhoneMatchText>
+                      <PhoneMatchActions>
+                        <Button
+                          type="button"
+                          onClick={() => handleUseExistingClient(occasionalMatch)}
+                        >
+                          Usar a {occasionalMatch.name || 'esa clienta'}
+                        </Button>
+                        <SecondaryButton
+                          type="button"
+                          onClick={() => handleKeepOccasional(occasionalMatch)}
+                        >
+                          Seguir como ocasional
+                        </SecondaryButton>
+                      </PhoneMatchActions>
+                    </PhoneMatch>
+                  )}
+                </OccasionalWrap>
+              ) : selectedClient ? (
                 <SelectedClient>
                   <SelectedInfo>
                     <FaUser size={14} />

@@ -68,13 +68,13 @@ export async function changeAppointmentStatus({
   const current = snapshot.exists()
     ? { id: snapshot.id, ...snapshot.data() }
     : appointment
-  const clientId = current.clientId || appointment.clientId
-  if (!clientId) {
-    throw new Error('Cita inválida.')
-  }
+  // La cita puede ser ocasional (sin clienta registrada): en ese caso no se
+  // acreditan puntos. `current` es la versión fresca de Firestore.
+  const clientId = current.clientId || null
+  const clientChanged =
+    Boolean(previousClientId) && previousClientId !== clientId
 
-  const clientRef = doc(db, CLIENTS_COLLECTION, clientId)
-  const clientChanged = Boolean(previousClientId) && previousClientId !== clientId
+  const clientRef = clientId ? doc(db, CLIENTS_COLLECTION, clientId) : null
   const previousClientRef = clientChanged
     ? doc(db, CLIENTS_COLLECTION, previousClientId)
     : null
@@ -83,7 +83,7 @@ export async function changeAppointmentStatus({
   return runTransaction(db, async (transaction) => {
     // Todas las lecturas primero.
     const apptSnap = await transaction.get(apptRef)
-    const clientSnap = await transaction.get(clientRef)
+    const clientSnap = clientRef ? await transaction.get(clientRef) : null
     const previousClientSnap = previousClientRef
       ? await transaction.get(previousClientRef)
       : null
@@ -93,7 +93,8 @@ export async function changeAppointmentStatus({
       ? { id: apptSnap.id, ...apptSnap.data() }
       : current
 
-    const target = getTargetPoints(fresh, services, newStatus)
+    // Sin clienta no hay puntos.
+    const target = clientId ? getTargetPoints(fresh, services, newStatus) : 0
     const currentPoints = Number(fresh.pointsAwarded) || 0
     // Si cambió el cliente, los puntos previos no eran de este cliente: se
     // revierten del anterior y se acredita el total al nuevo.
@@ -114,7 +115,7 @@ export async function changeAppointmentStatus({
       })
     }
 
-    if (delta !== 0 && clientSnap.exists()) {
+    if (clientRef && delta !== 0 && clientSnap?.exists()) {
       transaction.update(clientRef, {
         points: increment(delta),
         updatedAt: now,
