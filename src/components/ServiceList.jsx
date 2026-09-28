@@ -2,6 +2,8 @@ import styled from 'styled-components'
 import {
   FaCalendarDays,
   FaClock,
+  FaEye,
+  FaEyeSlash,
   FaListCheck,
   FaPencil,
   FaPlus,
@@ -118,6 +120,18 @@ const RangeChip = styled.span`
   color: var(--color-info);
 `
 
+const AdminOnlyChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--color-warning-soft, var(--color-info-soft));
+  color: var(--color-warning, var(--color-info));
+`
+
 const PointsChip = styled.span`
   display: inline-flex;
   align-items: center;
@@ -182,6 +196,7 @@ function ServiceList({
   tab = 'active',
   onEdit,
   onToggleActive,
+  onToggleAdminOnly,
   onScheduleRange,
   onManageAddons,
   onCreate,
@@ -238,6 +253,12 @@ function ServiceList({
               <Badge $active={service.active}>
                 {service.active ? 'Activo' : 'Inactivo'}
               </Badge>
+              {service.adminOnly && (
+                <AdminOnlyChip>
+                  <FaEyeSlash size={11} />
+                  Solo admin
+                </AdminOnlyChip>
+              )}
             </NameRow>
             <Meta>
               <Chip>
@@ -293,6 +314,18 @@ function ServiceList({
               onClick={() => onEdit(service)}
             >
               <FaPencil size={15} />
+            </IconButton>
+            <IconButton
+              type="button"
+              title={
+                service.adminOnly ? 'Mostrar a clientas' : 'Ocultar a clientas'
+              }
+              aria-label={
+                service.adminOnly ? 'Mostrar a clientas' : 'Ocultar a clientas'
+              }
+              onClick={() => onToggleAdminOnly(service)}
+            >
+              {service.adminOnly ? <FaEye size={15} /> : <FaEyeSlash size={15} />}
             </IconButton>
             {!service.active && (
               <IconButton

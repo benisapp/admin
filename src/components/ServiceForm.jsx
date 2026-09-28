@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import styled from 'styled-components'
+import { FaUserShield } from 'react-icons/fa6'
 import IconPicker from './IconPicker'
 import {
   Button,
@@ -43,7 +44,46 @@ const emptyValues = {
   price: '',
   points: '',
   icon: '',
+  adminOnly: false,
 }
+
+const CheckRow = styled.label`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin-top: 0.25rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--color-text);
+`
+
+const CheckInput = styled.input`
+  margin-top: 0.15rem;
+  accent-color: var(--color-primary);
+  flex-shrink: 0;
+`
+
+const CheckIcon = styled.span`
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-primary);
+  flex-shrink: 0;
+`
+
+const CheckText = styled.span`
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+`
+
+const CheckHint = styled.span`
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+`
 
 function ServiceForm({
   initialValues = emptyValues,
@@ -58,6 +98,7 @@ function ServiceForm({
     price: initialValues.price ?? '',
     points: initialValues.points ?? '',
     icon: initialValues.icon ?? '',
+    adminOnly: !!initialValues.adminOnly,
   })
   const [errors, setErrors] = useState({})
 
@@ -113,6 +154,7 @@ function ServiceForm({
       price: Number(values.price),
       points: values.points === '' ? 0 : Number(values.points),
       icon: values.icon,
+      adminOnly: !!values.adminOnly,
     })
   }
 
@@ -184,6 +226,26 @@ function ServiceForm({
           {errors.points && <ErrorText>{errors.points}</ErrorText>}
         </Field>
       </Row>
+
+      <CheckRow>
+        <CheckInput
+          type="checkbox"
+          checked={values.adminOnly}
+          onChange={(e) =>
+            setValues((prev) => ({ ...prev, adminOnly: e.target.checked }))
+          }
+        />
+        <CheckIcon>
+          <FaUserShield size={16} />
+        </CheckIcon>
+        <CheckText>
+          <span>Solo visible para admin</span>
+          <CheckHint>
+            No aparece en la app de clientas, pero se puede seguir agendando
+            desde el admin.
+          </CheckHint>
+        </CheckText>
+      </CheckRow>
 
       <Actions>
         {onCancel && (

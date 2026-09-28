@@ -14,6 +14,7 @@ import {
   setServiceActive,
   setServiceActiveRange,
   setServiceAddons,
+  setServiceAdminOnly,
   updateService,
 } from '../services'
 
@@ -205,6 +206,22 @@ function Servicios() {
     showNotice('success', 'Adicionales actualizados.')
   }
 
+  const handleToggleAdminOnly = async (service) => {
+    try {
+      await setServiceAdminOnly(service.id, !service.adminOnly)
+      await loadServices()
+      showNotice(
+        'success',
+        service.adminOnly
+          ? 'Servicio visible para las clientas.'
+          : 'Servicio oculto para las clientas.',
+      )
+    } catch (err) {
+      console.error(err)
+      showNotice('error', 'No se pudo actualizar el servicio.')
+    }
+  }
+
   const closeForm = () => {
     setShowForm(false)
     setEditing(null)
@@ -299,6 +316,7 @@ function Servicios() {
             tab={tab}
             onEdit={openEdit}
             onToggleActive={handleToggleActive}
+            onToggleAdminOnly={handleToggleAdminOnly}
             onScheduleRange={setRangeService}
             onManageAddons={setAddonsService}
             onCreate={openCreate}

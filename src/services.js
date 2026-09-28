@@ -39,7 +39,7 @@ export async function fetchServices() {
   return snapshot.docs.map(toService)
 }
 
-export async function createService({ name, duration, price, points, icon, addons }) {
+export async function createService({ name, duration, price, points, icon, addons, adminOnly }) {
   const now = new Date().toISOString()
   await addDoc(collection(db, SERVICES_COLLECTION), {
     name,
@@ -48,19 +48,21 @@ export async function createService({ name, duration, price, points, icon, addon
     points: Number(points) || 0,
     icon,
     addons: normalizeAddons(addons),
+    adminOnly: !!adminOnly,
     active: true,
     createdAt: now,
     updatedAt: now,
   })
 }
 
-export async function updateService(id, { name, duration, price, points, icon, addons }) {
+export async function updateService(id, { name, duration, price, points, icon, addons, adminOnly }) {
   await updateDoc(doc(db, SERVICES_COLLECTION, id), {
     name,
     duration,
     price,
     points: Number(points) || 0,
     icon,
+    adminOnly: !!adminOnly,
     ...(addons !== undefined ? { addons: normalizeAddons(addons) } : {}),
     updatedAt: new Date().toISOString(),
   })
@@ -78,6 +80,18 @@ export async function setServiceActive(id, active) {
     active,
     updatedAt: new Date().toISOString(),
   })
+}
+
+export async function setServiceAdminOnly(id, adminOnly) {
+  await updateDoc(doc(db, SERVICES_COLLECTION, id), {
+    adminOnly: !!adminOnly,
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+// El servicio se muestra a las clientas salvo que esté marcado como solo admin.
+export function isServiceVisibleToClients(service) {
+  return service?.adminOnly !== true
 }
 
 export async function setServiceActiveRange(id, { activeFrom, activeUntil }) {
