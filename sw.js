@@ -6,7 +6,7 @@
 //  - Peticiones a otros orígenes (Firebase, Google Fonts): pasan directo.
 //
 // Sube la versión de CACHE cuando quieras forzar una limpieza en los clientes.
-const CACHE = 'benis-admin-v2'
+const CACHE = 'benis-admin-v3'
 
 self.addEventListener('install', () => {
   self.skipWaiting()
